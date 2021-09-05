@@ -1,4 +1,4 @@
-package util
+package money
 
 import (
 	"github.com/rs/zerolog/log"

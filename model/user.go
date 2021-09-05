@@ -34,7 +34,11 @@ func FindUsers() []User {
 }
 
 func SaveUser(user User) User {
-	db.Resolve().Create(&user)
+	if user.ID > 0 {
+		db.Resolve().Save(&user)
+	} else {
+		db.Resolve().Create(&user)
+	}
 	return user
 }
 

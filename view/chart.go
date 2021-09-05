@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"nuchal-api/model"
 	"nuchal-api/util"
+	"nuchal-api/util/money"
 	"time"
 )
 
@@ -198,7 +199,7 @@ func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 			}
 
 			x := this.Time().UTC().Unix()
-			a1 := NewAnnotation(x, Enter, util.FloatToUsd(entry))
+			a1 := NewAnnotation(x, Enter, money.FloatToUsd(entry))
 			annos = append(annos, a1)
 			x2 := lastRate.Time().UTC().Unix()
 
@@ -210,16 +211,16 @@ func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 
 				if result >= 0 {
 					gain += result
-					a2 := NewAnnotation(x2, Won, util.FloatToUsd(exit))
+					a2 := NewAnnotation(x2, Won, money.FloatToUsd(exit))
 					annos = append(annos, a2)
 				} else {
 					loss += result
-					a2 := NewAnnotation(x2, Lost, util.FloatToUsd(exit))
+					a2 := NewAnnotation(x2, Lost, money.FloatToUsd(exit))
 					annos = append(annos, a2)
 				}
 
 			} else {
-				a1 := NewAnnotation(x2, Trade, util.FloatToUsd(lastRate.Close))
+				a1 := NewAnnotation(x2, Trade, money.FloatToUsd(lastRate.Close))
 				annos = append(annos, a1)
 				if lastRate.Close > entry {
 					tup += entry - lastRate.Close

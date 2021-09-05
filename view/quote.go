@@ -4,7 +4,8 @@ import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/model"
-	"nuchal-api/util"
+	"nuchal-api/model/product"
+	"nuchal-api/util/money"
 	"time"
 )
 
@@ -31,7 +32,7 @@ func GetQuotes(userID uint) []Quote {
 
 	u := model.FindUserByID(userID)
 
-	for _, product := range model.ProductArr {
+	for _, product := range product.ProductArr {
 		ticker, err := u.Client().GetTicker(product.ID)
 		if err != nil {
 			log.Err(err).Send()
@@ -51,9 +52,9 @@ func NewQuote(product cb.Product, ticker cb.Ticker) Quote {
 		QuoteCurrency:  product.QuoteCurrency,
 		BaseMinSize:    product.BaseMinSize,
 		BaseMaxSize:    product.BaseMaxSize,
-		QuoteIncrement: util.StringToDecimal(product.QuoteIncrement),
-		Price:          util.StringToUsd(ticker.Price),
-		Volume:         util.StringToDecimal(string(ticker.Volume)),
+		QuoteIncrement: money.StringToDecimal(product.QuoteIncrement),
+		Price:          money.StringToUsd(ticker.Price),
+		Volume:         money.StringToDecimal(string(ticker.Volume)),
 		Time:           ticker.Time.Time(),
 		Trend:          trend,
 	}
