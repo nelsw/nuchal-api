@@ -14,6 +14,10 @@ type Product struct {
 	cb.Product
 }
 
+func (p Product) ID() string {
+	return p.Product.BaseCurrency + "-" + p.Product.QuoteCurrency
+}
+
 var ProductIDs []string
 var ProductArr []Product
 var ProductMap = map[string]Product{}
@@ -31,8 +35,9 @@ func InitProducts(userID uint) error {
 
 	if len(ProductArr) > 0 {
 		for _, product := range ProductArr {
-			ProductMap[product.Product.ID] = product
-			ProductIDs = append(ProductIDs, product.Product.ID)
+			product.Product.ID = product.ID()
+			ProductMap[product.ID()] = product
+			ProductIDs = append(ProductIDs, product.ID())
 		}
 		return nil
 	}
@@ -56,8 +61,8 @@ func InitProducts(userID uint) error {
 		}
 		p := Product{gorm.Model{}, product}
 		db.Resolve().Create(&p)
-		ProductMap[p.Product.ID] = p
-		ProductIDs = append(ProductIDs, p.Product.ID)
+		ProductMap[p.ID()] = p
+		ProductIDs = append(ProductIDs, p.ID())
 		ProductArr = append(ProductArr, p)
 	}
 

@@ -32,6 +32,11 @@ type Rate struct {
 	cb.HistoricRate
 }
 
+type Data struct {
+	X int64     `json:"x"`
+	Y []float64 `json:"y"`
+}
+
 func NewRate(productID string, historicRate cb.HistoricRate) *Rate {
 	rate := new(Rate)
 	rate.Unix = historicRate.Time.UnixNano()
@@ -56,12 +61,12 @@ func (v *Rate) Time() time.Time {
 	return time.Unix(0, v.Unix)
 }
 
-func (v *Rate) Label() string {
-	return time.Unix(0, v.Unix).Format(time.Kitchen)
+func (v *Rate) Data() Data {
+	return Data{v.Time().UTC().Unix(), []float64{v.Open, v.High, v.Low, v.Close}}
 }
 
-func (v *Rate) Data() []float64 {
-	return []float64{v.Open, v.High, v.Low, v.Close}
+func (v Rate) AveragePrice() float64 {
+	return (v.Open + v.High + v.Low + v.Close) / 4
 }
 
 func GetAllRatesBetween(userID uint, productID string, alpha, omega int64) []Rate {

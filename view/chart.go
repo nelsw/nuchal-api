@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"nuchal-api/model"
 	"nuchal-api/util"
-	"nuchal-api/util/money"
 	"time"
 )
 
@@ -23,18 +22,14 @@ var (
 )
 
 type Chart struct {
-	Series  []Series `json:"series"`
-	Options `json:"chartOptions"`
+	Series     []Series `json:"series"`
+	Options    `json:"chartOptions"`
+	Simulation `json:"simulation"`
 }
 
 type Series struct {
-	Name string `json:"name"`
-	Data []Data `json:"data"`
-}
-
-type Data struct {
-	X int64     `json:"x"`
-	Y []float64 `json:"y"`
+	Name string       `json:"name"`
+	Data []model.Data `json:"data"`
 }
 
 type Options struct {
@@ -94,10 +89,78 @@ type Style struct {
 	Background string `json:"background"`
 }
 
+type Simulation struct {
+
+	// Gain is the gross amount won, fees not included.
+	Gain float64 `json:"gain"`
+
+	// Loss is the gross amount lost, fees not included.
+	Loss float64 `json:"loss"`
+
+	// Rise are the trades we're holding which are currently greater than the buy.
+	Rise float64 `json:"rise"`
+
+	// Fall are the trades we're holding which are currently less than the buy.
+	Fall float64 `json:"fall"`
+
+	// Stake is the amount we invested.
+	Stake float64 `json:"stake"`
+
+	// Take is the result of summing the total with closed holds
+	Take float64 `json:"take"`
+
+	// Net profit or loss, fees included. Does not include held products.
+	Net float64 `json:"net"`
+
+	// Total is the net less maker and taker fees.
+	Total float64 `json:"total"`
+
+	// Transactions are the trades that comprise the simulation.
+	Transactions []Transaction `json:"transactions"`
+}
+
+type Transaction struct {
+
+	// Alpha is the time of the buy.
+	Alpha int64 `json:"alpha"`
+
+	// Omega is the time of the sell.
+	Omega int64 `json:"omega"`
+
+	// Buy is the price which we purchase the product.
+	Buy float64 `json:"buy"`
+
+	// Sell is the price which we want to sell the product.
+	Sell float64 `json:"sell"`
+
+	// Sold is the price which we sold the product.
+	Sold float64 `json:"sold"`
+
+	// Hold is the last known price of the trade, it's still active.
+	Hold float64 `json:"hold"`
+
+	// Goal is the price which we want to sell that product including fees.
+	Goal float64 `json:"goal"`
+
+	// Stop is the price which we sell no matter what.
+	Stop float64 `json:"stop"`
+
+	// Entry is the buy price plus maker fees.
+	Entry float64 `json:"entry"`
+
+	// Exit is sell price plus taker fees.
+	Exit float64 `json:"exit"`
+
+	// Result is the net less maker and taker fees.
+	Result float64 `json:"result"`
+
+	AveragePrices []float64 `json:"average_prices"`
+}
+
 var offset int
 
 func NewAnnotation(x int64, color, text string) Annotation {
-	if offset < 288 {
+	if offset < 300 {
 		offset += 12
 	} else {
 		offset = 0
@@ -120,6 +183,7 @@ func NewAnnotation(x int64, color, text string) Annotation {
 	}
 }
 
+// todo - include size in calcs
 func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 
 	rates := model.GetAllRatesBetween(userID, productID, alpha, omega)
@@ -128,39 +192,48 @@ func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 
 	user := model.FindUserByID(userID)
 
-	var gain float64
-	var loss float64
-	var tup float64
-	var tdn float64
+	var gain, loss, holdUp, holdDown, stake float64
 
-	var annos []Annotation
+	var annotations []Annotation
+	var transactions []Transaction
 
 	var then, that model.Rate
 	for i, this := range rates {
 
+		if pattern.Bound == "Buys" && len(transactions) == pattern.Break {
+			break
+		}
+
 		if pattern.MatchesTweezerBottomPattern(then, that, this) {
 
-			var entry, exit, goal, entryPlusFee float64
+			var averagePrices []float64
+
+			var buy, sell, sold, goal, entry, stop float64
 			var lastRate model.Rate
 
 			for j, rate := range rates[i:] {
 
+				averagePrices = append(averagePrices, rate.AveragePrice())
+
 				if j == 0 {
-					exit = -1.0
-					entry = rate.Open
-					goal = pattern.GoalPrice(entry)
-					entryPlusFee = entry + (entry * user.Taker)
+					sold = -1.0
+					buy = rate.Open
+					stake += buy * pattern.Size
+					sell = pattern.GoalPrice(buy)
+					stop = pattern.LossPrice(buy)
+					goal = sell + (sell * user.Maker)
+					entry = buy + (buy * user.Taker)
 				}
 
 				lastRate = rate
 
 				// if the low meets or exceeds our loss limit ...
-				if rate.Low <= pattern.Loss {
+				if rate.Low < stop {
 
 					// ok, not the worst thing in the world, maybe a stop order already sold this for us
-					if exit == -1.0 {
+					if sold < 0 {
 						// nope, we never established a stop order for this chart, we took a bath
-						exit = pattern.Loss
+						sold = stop
 					}
 					break
 				}
@@ -169,19 +242,19 @@ func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 				if rate.High >= goal {
 
 					// is this the first time this has happened?
-					if exit == -1.0 {
-						// great, we have a stop (limit) entry order placed, continue on.
-						exit = goal
+					if sold < 0 {
+						// great, we have a stop (limit) buy order placed, continue on.
+						sold = sell
 					}
 
-					// now if the rate closes less than our exit, the entry order would have been triggered.
-					if rate.Close < exit {
+					// now if the rate closes less than our sold, the buy order would have been triggered.
+					if rate.Close < goal {
 						break
 					}
 
 					// else we're trending up, ride the wave.
-					if rate.Close >= exit {
-						exit = rate.Close
+					if rate.Close >= goal {
+						sold = rate.Close
 					}
 				}
 
@@ -192,42 +265,67 @@ func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 					continue
 				}
 
-				if exit == 0 && rate.Time().Sub(this.Time()) > time.Minute*75 && rate.High >= entryPlusFee {
-					exit = entryPlusFee
+				// if we have yet to sell this product
+				if sold < 0 &&
+					// and we've been holding for some time
+					rate.Time().Sub(this.Time()) > time.Hour*12 &&
+					// and we can break even ...
+					rate.High >= entry+(entry*user.Maker) {
+					// sell it
+					sold = entry
 					break
 				}
 			}
 
-			x := this.Time().UTC().Unix()
-			a1 := NewAnnotation(x, Enter, money.FloatToUsd(entry))
-			annos = append(annos, a1)
-			x2 := lastRate.Time().UTC().Unix()
+			alpha := this.Time().UTC().Unix()
+			omega := lastRate.Time().UTC().Unix()
 
-			if exit > 0 {
+			var icon, sale string
+			var hold, exit, result float64
 
-				exitPlusFee := exit + (exit * user.Maker)
+			entry *= pattern.Size
 
-				result := exitPlusFee - entryPlusFee
-
-				if result >= 0 {
-					gain += result
-					a2 := NewAnnotation(x2, Won, money.FloatToUsd(exit))
-					annos = append(annos, a2)
+			if sold < 0 {
+				icon = Trade
+				hold = lastRate.Close
+				exit = (lastRate.Close - (lastRate.Close * user.Maker)) * pattern.Size
+				result = exit - entry
+				sale = util.FloatToUsd(hold)
+				if hold >= buy {
+					holdUp += hold
 				} else {
-					loss += result
-					a2 := NewAnnotation(x2, Lost, money.FloatToUsd(exit))
-					annos = append(annos, a2)
+					holdDown += hold
 				}
-
 			} else {
-				a1 := NewAnnotation(x2, Trade, money.FloatToUsd(lastRate.Close))
-				annos = append(annos, a1)
-				if lastRate.Close > entry {
-					tup += entry - lastRate.Close
+				exit = (sold - (sold * user.Maker)) * pattern.Size
+				result = exit - entry
+				sale = util.FloatToUsd(sold)
+				if result > -0 {
+					gain += result
+					icon = Won
 				} else {
-					tdn += entry - lastRate.Close
+					gain -= result
+					icon = Lost
+
 				}
 			}
+
+			annotations = append(annotations, NewAnnotation(alpha, Enter, util.FloatToUsd(buy)))
+			annotations = append(annotations, NewAnnotation(omega, icon, sale))
+			transactions = append(transactions, Transaction{
+				Alpha:         alpha,
+				Omega:         omega,
+				Buy:           buy,
+				Sell:          sell,
+				Stop:          stop,
+				Sold:          sold,
+				Hold:          hold,
+				Goal:          goal,
+				Entry:         entry,
+				Exit:          exit,
+				Result:        result,
+				AveragePrices: averagePrices,
+			})
 		}
 		then = that
 		that = this
@@ -236,19 +334,24 @@ func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 	title := fmt.Sprintf("%s=%f ... %s=%f ... %s=%f ... %s=%f",
 		util.Won, gain,
 		util.Lost, loss,
-		util.TradingUp, tup,
-		util.TradingDown, tdn,
+		util.TradingUp, holdUp,
+		util.TradingDown, holdDown,
 	)
 
-	var data []Data
+	var data []model.Data
 	for _, rate := range rates {
-		data = append(data, Data{
-			X: rate.Time().UTC().Unix(),
-			Y: rate.Data(),
-		})
+		data = append(data, rate.Data())
 	}
 
 	return Chart{
+		Simulation: Simulation{
+			Gain:         gain,
+			Loss:         loss,
+			Rise:         holdUp,
+			Fall:         holdDown,
+			Stake:        stake,
+			Transactions: transactions,
+		},
 		Series: []Series{{"candles", data}},
 		Options: Options{
 			Detail:      detail,
@@ -256,7 +359,7 @@ func NewChartData(userID uint, productID string, alpha, omega int64) Chart {
 			Tooltip:     tooltip,
 			XAxis:       xaxis,
 			YAxis:       yaxis,
-			Annotations: Annotations{annos},
+			Annotations: Annotations{annotations},
 		},
 	}
 }

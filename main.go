@@ -39,7 +39,15 @@ func init() {
 	output.FormatFieldValue = func(i interface{}) string {
 		return strings.ToUpper(fmt.Sprintf("%s", i))
 	}
+
+	err := model.InitProducts(uint(1))
+	if err != nil {
+		log.Err(err).Str("key", "val").Send()
+	} else {
+		productsInitialized = true
+	}
 }
+
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -73,11 +81,49 @@ func main() {
 	router.GET("/user/:userID", getUserByID)
 	router.DELETE("/user/:userID", deleteUser)
 
-	router.PUT("/pattern")
-	router.GET("/pattern/:patternID")
-	router.DELETE("/pattern/:patternID", deleteUser)
+	router.PUT("/pattern", savePattern)
+	router.GET("/patterns/:userID", getPatterns)
+	router.GET("/pattern/:userID/:patternID", getPattern)
+	router.DELETE("/pattern/:patternID", deletePattern)
 
 	router.Run("localhost:9080")
+}
+
+func deletePattern(c *gin.Context) {
+	patternID := c.Param("patternID")
+	intID, err := strconv.Atoi(patternID)
+	if err != nil {
+		log.Err(err).Send()
+		c.Status(http.StatusBadRequest)
+	}
+	uintID := uint(intID)
+	model.DeletePattern(uintID)
+	c.Status(http.StatusOK)
+}
+
+func getPatterns(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, view.GetPatterns(userID(c)))
+}
+
+func getPattern(c *gin.Context) {
+	userID := userID(c)
+	productID := c.Param("productID")
+	c.IndentedJSON(http.StatusOK, view.GetPattern(userID, productID))
+}
+
+func savePattern(c *gin.Context) {
+	data, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Err(err).Send()
+		c.Status(http.StatusBadRequest)
+	}
+	var p model.Pattern
+	if err := json.Unmarshal(data, &p); err != nil {
+		log.Err(err).Send()
+		c.Status(http.StatusBadRequest)
+	}
+	p.Save()
+	c.IndentedJSON(http.StatusOK, view.GetPattern(p.UserID, p.ProductID))
 }
 
 func getChart(c *gin.Context) {
@@ -122,6 +168,7 @@ func getProductIDs(c *gin.Context) {
 }
 
 func getProductArr(c *gin.Context) {
+	user(c)
 	c.IndentedJSON(http.StatusOK, model.ProductArr)
 }
 
@@ -143,7 +190,7 @@ func userID(c *gin.Context) uint {
 	if !productsInitialized {
 
 		if err := model.InitProducts(uintID); err != nil {
-			log.Err(err).Send()
+			log.Err(err).Msg("userid")
 		} else {
 			productsInitialized = true
 		}
@@ -159,7 +206,7 @@ func user(c *gin.Context) *model.User {
 	if !productsInitialized {
 
 		if err := model.InitProducts(uintID); err != nil {
-			log.Err(err).Send()
+			log.Err(err).Msg("user")
 		} else {
 			productsInitialized = true
 		}
