@@ -7,10 +7,10 @@ import (
 	"nuchal-api/model"
 )
 
-func trade(userID uint, pattern model.Pattern) error {
+func trade(pattern model.Pattern) error {
 
 	log.Info().
-		Uint("userID", userID).
+		Uint("userID", pattern.UserID).
 		Str("productId", pattern.ProductID).
 		Msg("creating trades")
 
@@ -19,7 +19,7 @@ func trade(userID uint, pattern model.Pattern) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Uint("userID", userID).
+			Uint("userID", pattern.UserID).
 			Str("productID", pattern.ProductID).
 			Msg("error while opening websocket connection")
 		return err
@@ -29,7 +29,7 @@ func trade(userID uint, pattern model.Pattern) error {
 		if err := wsConn.Close(); err != nil {
 			log.Error().
 				Err(err).
-				Uint("userID", userID).
+				Uint("userID", pattern.UserID).
 				Str("productID", pattern.ProductID).
 				Msg("error closing websocket connection")
 		}
@@ -41,7 +41,7 @@ func trade(userID uint, pattern model.Pattern) error {
 	}); err != nil {
 		log.Error().
 			Err(err).
-			Uint("userID", userID).
+			Uint("userID", pattern.UserID).
 			Str("productID", pattern.ProductID).
 			Msg("error writing message to websocket")
 		return err
@@ -55,7 +55,7 @@ func trade(userID uint, pattern model.Pattern) error {
 
 			log.Error().
 				Err(err).
-				Uint("userID", userID).
+				Uint("userID", pattern.UserID).
 				Str("productID", pattern.ProductID).
 				Msg("error getting rate")
 
@@ -66,7 +66,7 @@ func trade(userID uint, pattern model.Pattern) error {
 		}
 
 		if pattern.MatchesTweezerBottomPattern(then, that, this) {
-			go buy(wsConn, userID, pattern)
+			go buy(wsConn, pattern)
 		}
 
 		then = that

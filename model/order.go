@@ -55,5 +55,7 @@ func StopLossOrder(productID, size string, price float64) cb.Order {
 }
 
 func precisePrice(productID string, price float64) string {
-	return fmt.Sprintf("%.3f", price)
+	product := ProductMap[productID]
+	format := "%." + product.QuoteIncrement + "f"
+	return fmt.Sprintf(format, price)
 }

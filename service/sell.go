@@ -6,10 +6,10 @@ import (
 	"nuchal-api/model"
 )
 
-func sell(wsConn *ws.Conn, userID uint, exitPrice float64, size string, pattern model.Pattern) {
+func sell(wsConn *ws.Conn, exitPrice float64, size string, pattern model.Pattern) {
 
 	log.Info().
-		Uint("userID", userID).
+		Uint("userID", pattern.UserID).
 		Str("productID", pattern.ProductID).
 		Float64("exitPrice", exitPrice).
 		Str("size", size).
@@ -24,14 +24,14 @@ func sell(wsConn *ws.Conn, userID uint, exitPrice float64, size string, pattern 
 
 			log.Error().
 				Err(err).
-				Uint("userID", userID).
+				Uint("userID", pattern.UserID).
 				Str("productID", pattern.ProductID).
 				Msg("error getting price during sell")
 
-			if _, err := CreateOrder(userID, model.NewStopEntryOrder(pattern.ProductID, size, exitPrice)); err != nil {
+			if _, err := CreateOrder(pattern.UserID, model.NewStopEntryOrder(pattern.ProductID, size, exitPrice)); err != nil {
 				log.Error().
 					Err(err).
-					Uint("userID", userID).
+					Uint("userID", pattern.UserID).
 					Str("productID", pattern.ProductID).
 					Msg("error while creating stop entry order during sell")
 			}
@@ -44,10 +44,10 @@ func sell(wsConn *ws.Conn, userID uint, exitPrice float64, size string, pattern 
 
 		stopLossOrder := model.StopLossOrder(pattern.ProductID, size, lastPrice)
 
-		if stopLossOrder, err = CreateOrder(userID, stopLossOrder); err != nil {
+		if stopLossOrder, err = CreateOrder(pattern.UserID, stopLossOrder); err != nil {
 			log.Error().
 				Err(err).
-				Uint("userID", userID).
+				Uint("userID", pattern.UserID).
 				Str("productID", pattern.ProductID).
 				Msg("error while creating stop loss order")
 			return
@@ -60,7 +60,7 @@ func sell(wsConn *ws.Conn, userID uint, exitPrice float64, size string, pattern 
 			if rate, err = getRate(wsConn, pattern.ProductID); err != nil {
 				log.Error().
 					Err(err).
-					Uint("userID", userID).
+					Uint("userID", pattern.UserID).
 					Str("productID", pattern.ProductID).
 					Msg("error while getting rate during stop loss climb")
 				return
@@ -74,20 +74,20 @@ func sell(wsConn *ws.Conn, userID uint, exitPrice float64, size string, pattern 
 
 				log.Info().Msg("found better price!")
 
-				if err = CancelOrder(userID, stopLossOrder.ID); err != nil {
+				if err = CancelOrder(pattern.UserID, stopLossOrder.ID); err != nil {
 					log.Error().
 						Err(err).
-						Uint("userID", userID).
+						Uint("userID", pattern.UserID).
 						Str("productID", pattern.ProductID).
 						Msg("error while canceling order")
 					return
 				}
 
 				exitPrice = rate.Close
-				if stopLossOrder, err = CreateOrder(userID, model.StopLossOrder(pattern.ProductID, size, exitPrice)); err != nil {
+				if stopLossOrder, err = CreateOrder(pattern.UserID, model.StopLossOrder(pattern.ProductID, size, exitPrice)); err != nil {
 					log.Error().
 						Err(err).
-						Uint("userID", userID).
+						Uint("userID", pattern.UserID).
 						Str("productID", pattern.ProductID).
 						Msg("error while creating stop loss order")
 					return
