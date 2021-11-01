@@ -19,6 +19,7 @@
 package model
 
 import (
+	"fmt"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/db"
@@ -37,12 +38,16 @@ type Data struct {
 	Y []float64 `json:"y"`
 }
 
-func NewRate(productID string, historicRate cb.HistoricRate) *Rate {
-	rate := new(Rate)
-	rate.Unix = historicRate.Time.UnixNano()
-	rate.ProductID = productID
-	rate.HistoricRate = historicRate
-	return rate
+func init() {
+	db.Migrate(&Rate{})
+}
+
+func NewRate(productID string, historicRate cb.HistoricRate) Rate {
+	return Rate{
+		Unix:         historicRate.Time.Unix(),
+		ProductID:    productID,
+		HistoricRate: historicRate,
+	}
 }
 
 func (v *Rate) IsDown() bool {
@@ -58,20 +63,69 @@ func (v *Rate) IsInit() bool {
 }
 
 func (v *Rate) Time() time.Time {
-	return time.Unix(0, v.Unix)
+	return time.Unix(v.Unix, 0)
 }
 
 func (v *Rate) Data() Data {
 	return Data{v.Time().UTC().Unix(), []float64{v.Open, v.High, v.Low, v.Close}}
 }
 
+func (v *Rate) OHLCV() []interface{} {
+	return []interface{}{v.Time().UnixMilli(), v.Open, v.High, v.Low, v.Close, v.Volume}
+}
+
 func (v Rate) AveragePrice() float64 {
 	return (v.Open + v.High + v.Low + v.Close) / 4
 }
 
+func (v Rate) Stamp() string {
+	return v.Time().UTC().Format(time.Stamp)
+}
+
+func InitRates(userID uint) error {
+
+	if len(ProductIDs) < 1 {
+		if err := InitProducts(userID); err != nil {
+			return err
+		}
+	}
+
+	for _, productID := range ProductIDs {
+		if err := InitRate(userID, productID); err != nil {
+			log.Err(err).Send()
+		}
+	}
+
+	return nil
+}
+
+func InitRate(userID uint, productID string) error {
+
+	log.Trace().
+		Uint("userID", userID).
+		Str("productID", productID).
+		Msg("InitRate")
+
+	alpha := time.Date(2021, 9, 1, 0, 0, 0, 0, time.UTC)
+	omega := time.Date(2021, 10, 1, 0, 0, 0, 0, time.UTC).Add(time.Second * -1)
+
+	rates := GetNewRatesFromTo(userID, productID, alpha, omega)
+
+	log.Trace().
+		Uint("userID", userID).
+		Str("productID", productID).
+		Time("alpha", alpha).
+		Int("rates", len(rates)).
+		Msg("InitRate")
+
+	db.Resolve().CreateInBatches(&rates, 1000)
+
+	return nil
+}
+
 func GetAllRatesBetween(userID uint, productID string, alpha, omega int64) []Rate {
 
-	rates := GetOldRatesBetween(productID, alpha, omega)
+	rates := FindRatesBetween(productID, alpha, omega)
 
 	var from time.Time
 	size := len(rates)
@@ -82,7 +136,7 @@ func GetAllRatesBetween(userID uint, productID string, alpha, omega int64) []Rat
 	}
 
 	newRates := GetNewRatesFrom(userID, productID, from)
-	rates = append(newRates, rates...)
+	rates = append(rates, newRates...)
 
 	sort.SliceStable(rates, func(i, j int) bool {
 		return rates[i].Time().Before(rates[j].Time())
@@ -91,15 +145,52 @@ func GetAllRatesBetween(userID uint, productID string, alpha, omega int64) []Rat
 	return rates
 }
 
-func GetOldRatesBetween(productID string, alpha, omega int64) []Rate {
+func FindRatesBetween(productID string, alpha, omega int64) []Rate {
 
 	var rates []Rate
 
 	db.Resolve().
 		Where("product_id = ?", productID).
 		Where("unix BETWEEN ? AND ?", alpha, omega).
+		Order("unix asc").
+		Find(&rates)
+
+	return rates
+}
+
+func FindAllRates(productID string) []Rate {
+
+	var rates []Rate
+
+	db.Resolve().
+		Where("product_id = ?", productID).
 		Order("unix desc").
 		Find(&rates)
+
+	return rates
+}
+
+func GetNewRatesFromTo(userID uint, productID string, alpha, omega time.Time) []Rate {
+
+	log.Trace().
+		Uint("userID", userID).
+		Str("productID", productID).
+		Time("alpha", alpha).
+		Time("omega", omega).
+		Msg("GetNewRatesFromTo")
+
+	var rates []Rate
+
+	out, err := GetHistoricRates(userID, productID, alpha, omega)
+	if err != nil {
+		fmt.Println(err)
+		log.Err(err).Send()
+		return rates
+	}
+
+	for _, rate := range out {
+		rates = append(rates, NewRate(productID, rate))
+	}
 
 	return rates
 }
@@ -115,9 +206,7 @@ func GetNewRatesFrom(userID uint, productID string, alpha time.Time) []Rate {
 	}
 
 	for _, rate := range out {
-		modelRate := *NewRate(productID, rate)
-		db.Resolve().Create(&modelRate)
-		rates = append(rates, modelRate)
+		rates = append(rates, Rate{rate.Time.Unix(), productID, rate})
 	}
 
 	return rates
@@ -131,10 +220,12 @@ func GetHistoricRates(userID uint, productID string, alpha, omega time.Time) ([]
 
 	u := FindUserByID(userID)
 
-	for _, params := range params {
-		out, err := u.Client().GetHistoricRates(productID, params)
+	for _, p := range params {
+		out, err := u.Client().GetHistoricRates(productID, p)
 		if err != nil {
-			return nil, err
+			log.Err(err).Send()
+			fmt.Println(err)
+			return rates, err
 		}
 		rates = append(rates, out...)
 	}
@@ -143,14 +234,19 @@ func GetHistoricRates(userID uint, productID string, alpha, omega time.Time) ([]
 }
 
 func rateParams(alpha, omega time.Time) []cb.GetHistoricRatesParams {
-	start := alpha
-	end := start.Add(time.Hour * 4)
+
+	start := omega.Add(time.Hour * 4 * -1)
+	end := omega
+
+	chunks := omega.Sub(alpha).Minutes()
+
 	var results []cb.GetHistoricRatesParams
-	for i := 0; i < 24; i += 4 {
+
+	for i := 0.0; i < chunks; i += 4 {
 		results = append(results, cb.GetHistoricRatesParams{start, end, 60})
-		start = end
-		end = end.Add(time.Hour * 4)
-		if end.After(omega) {
+		end = start
+		start = start.Add(time.Hour * 4 * -1)
+		if start.Before(alpha) {
 			break
 		}
 	}

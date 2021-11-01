@@ -17,8 +17,6 @@ import (
 	"time"
 )
 
-var productsInitialized = false
-
 func init() {
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -43,8 +41,6 @@ func init() {
 	err := model.InitProducts(uint(1))
 	if err != nil {
 		log.Err(err).Str("key", "val").Send()
-	} else {
-		productsInitialized = true
 	}
 }
 
@@ -69,7 +65,9 @@ func main() {
 
 	router.Use(CORS())
 
-	router.GET("/chart/:userID/:productID/:alpha/:omega", getChart)
+	router.GET("/rates/:productID/:alpha/:omega", findAllRatesBetween)
+
+	router.GET("/sim/:userID/:productID/:alpha/:omega", getSim)
 
 	router.GET("/productArr/:userID", getProductArr)
 	router.GET("/productIDs/:userID", getProductIDs)
@@ -87,6 +85,21 @@ func main() {
 	router.DELETE("/pattern/:patternID", deletePattern)
 
 	router.Run("localhost:9080")
+}
+
+func getSim(c *gin.Context) {
+	userID := userID(c)
+	productID := c.Param("productID")
+	alpha := util.StringToInt64(c.Param("alpha"))
+	omega := util.StringToInt64(c.Param("omega"))
+	c.IndentedJSON(http.StatusOK, view.NewSim(userID, productID, alpha, omega))
+}
+
+func findAllRatesBetween(c *gin.Context) {
+	productID := c.Param("productID")
+	alpha := util.StringToInt64(c.Param("alpha"))
+	omega := util.StringToInt64(c.Param("omega"))
+	c.IndentedJSON(http.StatusOK, view.FindRatesBetween(productID, alpha, omega))
 }
 
 func deletePattern(c *gin.Context) {
@@ -124,14 +137,6 @@ func savePattern(c *gin.Context) {
 	}
 	p.Save()
 	c.IndentedJSON(http.StatusOK, view.GetPattern(p.UserID, p.ProductID))
-}
-
-func getChart(c *gin.Context) {
-	userID := userID(c)
-	productID := c.Param("productID")
-	alpha := util.StringToInt64(c.Param("alpha"))
-	omega := util.StringToInt64(c.Param("omega"))
-	c.IndentedJSON(http.StatusOK, view.NewChartData(userID, productID, alpha, omega))
 }
 
 func deleteUser(c *gin.Context) {
@@ -177,42 +182,15 @@ func getQuotes(c *gin.Context) {
 }
 
 func userID(c *gin.Context) uint {
-
-	stringID := c.Param("userID")
-
-	intID, err := strconv.Atoi(stringID)
+	intID, err := strconv.Atoi(c.Param("userID"))
 	if err != nil {
 		log.Err(err).Send()
 	}
-
-	uintID := uint(intID)
-
-	if !productsInitialized {
-
-		if err := model.InitProducts(uintID); err != nil {
-			log.Err(err).Msg("userid")
-		} else {
-			productsInitialized = true
-		}
-	}
-
-	return uintID
+	return uint(intID)
 }
 
 func user(c *gin.Context) *model.User {
-
 	uintID := userID(c)
-
-	if !productsInitialized {
-
-		if err := model.InitProducts(uintID); err != nil {
-			log.Err(err).Msg("user")
-		} else {
-			productsInitialized = true
-		}
-	}
-
 	user := model.FindUserByID(uintID)
-
 	return &user
 }

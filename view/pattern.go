@@ -11,6 +11,8 @@ type Pattern struct {
 
 func GetPatterns(userID uint) []Pattern {
 
+	_ = model.InitProducts(userID)
+
 	var patterns []Pattern
 	for _, p := range model.GetPatterns(userID) {
 		pattern := Pattern{

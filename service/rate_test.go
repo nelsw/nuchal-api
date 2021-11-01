@@ -1,4 +1,4 @@
-package model
+package service
 
 import (
 	"fmt"
@@ -34,26 +34,21 @@ func init() {
 
 var (
 	userID    = uint(1)
-	productID = "BTC-USD"
-	omega     = time.Now().Unix()
-	alpha     = time.Now().Add(time.Hour * 24 * 7 * -1).Unix()
+	productID = "ALGO-USD"
+	alpha     = time.Date(2021, 10, 31, 0, 0, 0, 0, time.UTC).UnixMilli()
+	omega     = time.Date(2021, 10, 31, 11, 0, 0, 0, time.UTC).UnixMilli()
 )
 
-func TestInitRates(t *testing.T) {
-	err := InitRates(userID)
-	if err != nil {
+func TestSaveAllRatesBetweenFor(t *testing.T) {
+
+	if err := SaveTodayRatesFor(userID, productID); err != nil {
 		t.Fail()
 	}
+
 }
 
-func TestInitRate(t *testing.T) {
-	err := InitRate(userID, productID)
-	if err != nil {
+func TestSaveAllNewRates(t *testing.T) {
+	if err := SaveAllNewRates(userID); err != nil {
 		t.Fail()
 	}
-}
-
-func TestFindRatesBetween(t *testing.T) {
-	rates := FindRatesBetween(productID, alpha, omega)
-	fmt.Println(len(rates))
 }

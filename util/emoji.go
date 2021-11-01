@@ -28,6 +28,8 @@ const (
 	TradingUp   = `📈`
 	TradingDown = `📉`
 
+	Steak = `🥩`
+
 	Won  = `🏆`
 	Lost = `❌`
 

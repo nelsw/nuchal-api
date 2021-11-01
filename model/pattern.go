@@ -29,7 +29,7 @@ type Pattern struct {
 	Delta float64 `json:"delta"`
 
 	// Bind is represents the time of day when this strategy should activate.
-	// Value of bind is the total amount of milliseconds totaling hour and minutes.
+	// Gross of bind is the total amount of milliseconds totaling hour and minutes.
 	Bind int64 `json:"bind"`
 
 	// Bound is the context to which this strategy looks to achieve so that it can break.

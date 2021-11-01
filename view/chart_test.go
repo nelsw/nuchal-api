@@ -1,17 +1,30 @@
 package view
 
 import (
-	"nuchal-api/model"
 	"testing"
 )
 
 func TestNewChartData(t *testing.T) {
 
-	userID := uint(1)
-	model.InitProducts(userID)
-	productID := "ALGO-USD"
-	alpha := int64(1630394175)
-	omega := int64(1630462400)
-	NewChartData(userID, productID, alpha, omega)
-
+	//omega := time.Now().UnixNano()
+	//alpha := time.Now().Add(time.Hour * 24 * 90 * -1).UnixNano()
+	//
+	//userID := uint(1)
+	//model.InitProducts(userID)
+	//productID := "ALGO-USD"
+	//
+	//chart := NewChartData(NewSimulation(userID, productID, alpha, omega))
+	//
+	//var i int
+	//var m float64
+	//for _, t := range chart.Transactions {
+	//	win := t.Sold > t.Goal
+	//	if win {
+	//		i++
+	//		m = m + (t.Sold - t.Goal)
+	//	}
+	//}
+	//
+	//fmt.Println(i)
+	//fmt.Println(m)
 }

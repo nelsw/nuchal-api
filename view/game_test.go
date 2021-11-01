@@ -1,4 +1,4 @@
-package model
+package view
 
 import (
 	"fmt"
@@ -32,28 +32,21 @@ func init() {
 	}
 }
 
-var (
-	userID    = uint(1)
-	productID = "BTC-USD"
-	omega     = time.Now().Unix()
-	alpha     = time.Now().Add(time.Hour * 24 * 7 * -1).Unix()
-)
+func Test(t *testing.T) {
 
-func TestInitRates(t *testing.T) {
-	err := InitRates(userID)
-	if err != nil {
-		t.Fail()
+	for _, game := range FindAllGames() {
+		for _, play := range game.Plays {
+			fmt.Println(fmt.Sprintf(headFmt, "ID", "Open", "High", "Low", "Close"))
+
+			for _, rate := range play.Rates {
+				fmt.Println(fmt.Sprintf(lineFmt, rate.Stamp(), rate.Open, rate.High, rate.Low, rate.Close))
+			}
+
+			fmt.Println(game.ProductID)
+			fmt.Println(play.Bonus)
+			fmt.Println(play.Ratio)
+			fmt.Println()
+			break
+		}
 	}
-}
-
-func TestInitRate(t *testing.T) {
-	err := InitRate(userID, productID)
-	if err != nil {
-		t.Fail()
-	}
-}
-
-func TestFindRatesBetween(t *testing.T) {
-	rates := FindRatesBetween(productID, alpha, omega)
-	fmt.Println(len(rates))
 }
