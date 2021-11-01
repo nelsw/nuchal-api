@@ -7,6 +7,7 @@ import (
 	"nuchal-api/model"
 )
 
+// todo - implement with pattern conditions like bind, break, etc
 func trade(pattern model.Pattern) error {
 
 	log.Info().

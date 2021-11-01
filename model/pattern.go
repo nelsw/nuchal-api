@@ -89,14 +89,11 @@ func GetPatterns(userID uint) []Pattern {
 }
 
 func GetPattern(userID uint, productID string) Pattern {
-
-	pattern := Pattern{}
-
+	var pattern Pattern
 	db.Resolve().
 		Where("user_id = ?", userID).
 		Where("product_id = ?", productID).
 		Find(&pattern)
-
 	return pattern
 }
 

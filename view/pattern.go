@@ -6,7 +6,7 @@ import (
 
 type Pattern struct {
 	model.Pattern
-	Product model.Product `json:"product"`
+	model.Product `json:"product"`
 }
 
 func GetPatterns(userID uint) []Pattern {
@@ -26,9 +26,5 @@ func GetPatterns(userID uint) []Pattern {
 }
 
 func GetPattern(userID uint, productID string) Pattern {
-	p := model.GetPattern(userID, productID)
-	return Pattern{
-		Pattern: p,
-		Product: model.ProductMap[p.ProductID],
-	}
+	return Pattern{model.GetPattern(userID, productID), model.ProductMap[productID]}
 }
