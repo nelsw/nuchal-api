@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"nuchal-api/util"
 	"os"
 	"strings"
 	"testing"
@@ -32,14 +33,14 @@ func init() {
 	}
 }
 
-var (
-	userID    = uint(1)
-	productID = "BTC-USD"
-	omega     = time.Now().Unix()
-	alpha     = time.Now().Add(time.Hour * 24 * 7 * -1).Unix()
-)
+func TestGetPositions(t *testing.T) {
 
-func TestFindRatesBetween(t *testing.T) {
-	rates := FindRatesBetween(productID, alpha, omega)
-	fmt.Println(len(rates))
+	userID := uint(1)
+
+	positions, err := GetPositions(userID)
+	if err != nil {
+		t.Fail()
+	}
+
+	fmt.Println(util.Pretty(positions))
 }

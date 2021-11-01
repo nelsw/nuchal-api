@@ -39,6 +39,9 @@ func InitProducts(userID uint) error {
 			ProductMap[product.ID()] = product
 			ProductIDs = append(ProductIDs, product.ID())
 		}
+		sort.SliceStable(ProductIDs, func(i, j int) bool {
+			return strings.Compare(ProductIDs[i], ProductIDs[j]) < 0
+		})
 		return nil
 	}
 

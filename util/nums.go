@@ -23,3 +23,18 @@ func StringToInt64(s string) int64 {
 	i64 := int64(i)
 	return i64
 }
+
+func MinInt(a, z int) int {
+	if a < z {
+		return a
+	} else {
+		return z
+	}
+}
+
+func FirstIntOrZero(arr []int) int {
+	if arr != nil && len(arr) > 0 {
+		return arr[0]
+	}
+	return 0
+}
