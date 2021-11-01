@@ -26,8 +26,6 @@ func CreateOrder(userID uint, order cb.Order, attempt ...int) (cb.Order, error) 
 			Str("orderID", order.ID).
 			Msg("created order")
 
-		model.SaveOrder(r)
-
 		return GetOrder(userID, r.ID)
 	}
 
@@ -39,7 +37,7 @@ func CreateOrder(userID uint, order cb.Order, attempt ...int) (cb.Order, error) 
 	}
 
 	i := util.FirstIntOrZero(attempt)
-	if isInsufficientFunds(err) || i > 10 {
+	if err.Error() == "Insufficient funds" || i > 10 {
 		return cb.Order{}, err
 	}
 
@@ -142,6 +140,15 @@ func CancelOrder(userID uint, orderID string, attempt ...int) error {
 	return CancelOrder(userID, orderID, i)
 }
 
-func isInsufficientFunds(err error) bool {
-	return err != nil && err.Error() == "Insufficient funds"
+func GetOrders(userID uint, productID string) ([]cb.Order, error) {
+	u := model.FindUserByID(userID)
+	var orders, nextOrders []cb.Order
+	cursor := u.Client().ListOrders(cb.ListOrdersParams{ProductID: productID})
+	for cursor.HasMore {
+		if err := cursor.NextPage(&nextOrders); err != nil {
+			return nil, err
+		}
+		orders = append(orders, nextOrders...)
+	}
+	return orders, nil
 }

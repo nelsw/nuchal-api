@@ -1,9 +1,12 @@
 package model
 
 import (
+	"fmt"
+	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"gorm.io/gorm"
 	"math"
 	"nuchal-api/db"
+	"nuchal-api/util"
 )
 
 // Pattern defines the criteria for matching rates and placing orders.
@@ -95,4 +98,52 @@ func GetPattern(userID uint, productID string) Pattern {
 		Find(&pattern)
 
 	return pattern
+}
+
+func (p Pattern) NewMarketEntryOrder() cb.Order {
+	return cb.Order{
+		ProductID: p.ProductID,
+		Side:      "buy",
+		Size:      util.FloatToDecimal(p.Size),
+		Type:      "market",
+	}
+}
+
+func (p Pattern) NewMarketExitOrder() cb.Order {
+	return cb.Order{
+		ProductID: p.ProductID,
+		Side:      "sell",
+		Size:      util.FloatToDecimal(p.Size),
+		Type:      "market",
+	}
+}
+
+func (p Pattern) NewStopEntryOrder(size string, price float64) cb.Order {
+	return cb.Order{
+		Price:     precisePrice(p.ProductID, price),
+		ProductID: p.ProductID,
+		Side:      "sell",
+		Size:      size,
+		Type:      "limit",
+		StopPrice: precisePrice(p.ProductID, price),
+		Stop:      "entry",
+	}
+}
+
+func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
+	return cb.Order{
+		Price:     precisePrice(p.ProductID, price),
+		ProductID: p.ProductID,
+		Side:      "sell",
+		Size:      size,
+		Type:      "limit",
+		StopPrice: precisePrice(p.ProductID, price),
+		Stop:      "loss",
+	}
+}
+
+func precisePrice(productID string, price float64) string {
+	product := ProductMap[productID]
+	format := "%." + product.QuoteIncrement + "f"
+	return fmt.Sprintf(format, price)
 }

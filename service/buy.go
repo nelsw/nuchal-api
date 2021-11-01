@@ -14,7 +14,7 @@ func buy(wsConn *ws.Conn, pattern model.Pattern) {
 		Str("productId", pattern.ProductID).
 		Msg("buy")
 
-	order, err := CreateOrder(pattern.UserID, model.NewMarketEntryOrder(pattern.ProductID, pattern.Size))
+	order, err := CreateOrder(pattern.UserID, pattern.NewMarketEntryOrder())
 
 	if err != nil {
 		log.Error().
@@ -31,8 +31,11 @@ func buy(wsConn *ws.Conn, pattern model.Pattern) {
 		Str("orderId", order.ID).
 		Msg("created order")
 
-	entryPrice := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
-	exitPrice := pattern.GoalPrice(entryPrice)
+	entry := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
 
-	sell(wsConn, exitPrice, order.Size, pattern)
+	for {
+		if err := sell(wsConn, entry, order.Size, pattern); err == nil {
+			break
+		}
+	}
 }
