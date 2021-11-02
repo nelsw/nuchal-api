@@ -44,6 +44,8 @@ type Pattern struct {
 
 	// Enable is a flag that allows the system to bind, get bound, and break.
 	Enable bool `json:"enable"`
+
+	Product Product `json:"product" gorm:"embedded"`
 }
 
 func init() {
@@ -78,6 +80,14 @@ func (p Pattern) Save() Pattern {
 
 func DeletePattern(patternID uint) {
 	db.Resolve().Delete(&Pattern{}, patternID)
+}
+
+func FindPatternByID(patternID uint) Pattern {
+	var pattern Pattern
+	db.Resolve().
+		Where("id = ?", pattern).
+		Find(&pattern)
+	return pattern
 }
 
 func GetPatterns(userID uint) []Pattern {
@@ -137,6 +147,27 @@ func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 		StopPrice: precisePrice(p.ProductID, price),
 		Stop:      "loss",
 	}
+}
+
+func FindPatterns(userID uint) []Pattern {
+
+	_ = InitProducts(userID)
+
+	var patterns []Pattern
+	for _, p := range GetPatterns(userID) {
+		pattern := Pattern{
+			Product: ProductMap[p.ProductID],
+		}
+		patterns = append(patterns, pattern)
+	}
+
+	return patterns
+}
+
+func FindPattern(userID uint, productID string) Pattern {
+	p := GetPattern(userID, productID)
+	p.Product = ProductMap[productID]
+	return p
 }
 
 func precisePrice(productID string, price float64) string {

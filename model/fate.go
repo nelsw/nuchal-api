@@ -1,17 +1,16 @@
-package service
+package model
 
 import (
 	ws "github.com/gorilla/websocket"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/db"
-	"nuchal-api/model"
 	"time"
 )
 
 func SaveTodayRatesFor(userID uint, productID string) error {
 
-	if err := model.InitProducts(userID); err != nil {
+	if err := InitProducts(userID); err != nil {
 		log.Err(err).Send()
 		return err
 	}
@@ -21,7 +20,7 @@ func SaveTodayRatesFor(userID uint, productID string) error {
 	omega := time.Now()
 	alpha := time.Date(omega.Year(), omega.Month(), omega.Day(), 0, 0, 0, 0, time.UTC)
 
-	history, err := model.GetHistoricRates(userID, productID, alpha, omega)
+	history, err := GetHistoricRates(userID, productID, alpha, omega)
 	if err != nil {
 		log.Err(err).Send()
 		return err
@@ -30,7 +29,7 @@ func SaveTodayRatesFor(userID uint, productID string) error {
 	log.Trace().Int("history", len(history)).Send()
 
 	for _, h := range history {
-		rate := model.NewRate(productID, h)
+		rate := NewRate(productID, h)
 		db.Resolve().Create(&rate)
 	}
 
@@ -39,12 +38,12 @@ func SaveTodayRatesFor(userID uint, productID string) error {
 
 func SaveAllNewRates(userID uint) error {
 
-	if err := model.InitProducts(userID); err != nil {
+	if err := InitProducts(userID); err != nil {
 		log.Err(err).Send()
 		return err
 	}
 
-	for _, productID := range model.ProductIDs {
+	for _, productID := range ProductIDs {
 
 		log.Trace().Str("productID", productID).Send()
 
@@ -52,7 +51,7 @@ func SaveAllNewRates(userID uint) error {
 
 		log.Trace().Time("last rate time", t).Send()
 
-		history, err := model.GetHistoricRates(userID, productID, t, time.Now())
+		history, err := GetHistoricRates(userID, productID, t, time.Now())
 		if err != nil {
 			log.Err(err).Send()
 			return err
@@ -61,7 +60,7 @@ func SaveAllNewRates(userID uint) error {
 		log.Trace().Int("history", len(history)).Send()
 
 		for _, h := range history {
-			rate := model.NewRate(productID, h)
+			rate := NewRate(productID, h)
 			db.Resolve().Create(&rate)
 		}
 	}
@@ -70,7 +69,7 @@ func SaveAllNewRates(userID uint) error {
 }
 
 func getLastRateTime(productID string) time.Time {
-	var rate model.Rate
+	var rate Rate
 	db.Resolve().
 		Where("product_id = ?", productID).
 		Order("unix desc").
@@ -78,7 +77,7 @@ func getLastRateTime(productID string) time.Time {
 	return rate.Time()
 }
 
-func getRate(wsConn *ws.Conn, productID string) (model.Rate, error) {
+func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 
 	end := time.Now().Add(time.Minute)
 
@@ -91,7 +90,7 @@ func getRate(wsConn *ws.Conn, productID string) (model.Rate, error) {
 				Err(err).
 				Str("productID", productID).
 				Msg("error getting price")
-			return model.Rate{}, err
+			return Rate{}, err
 		}
 
 		volume++
@@ -108,7 +107,7 @@ func getRate(wsConn *ws.Conn, productID string) (model.Rate, error) {
 
 		if time.Now().After(end) {
 
-			rate := model.Rate{
+			rate := Rate{
 				time.Now().UnixMilli(),
 				productID,
 				cb.HistoricRate{

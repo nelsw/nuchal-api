@@ -1,9 +1,8 @@
-package service
+package model
 
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
-	"nuchal-api/model"
 	"nuchal-api/util"
 	"time"
 )
@@ -11,7 +10,7 @@ import (
 // CreateOrder creates an order on Coinbase and returns the order once it is no longer pending and has settled.
 func CreateOrder(userID uint, order cb.Order, attempt ...int) (cb.Order, error) {
 
-	u := model.FindUserByID(userID)
+	u := FindUserByID(userID)
 
 	log.Info().
 		Uint("userID", userID).
@@ -49,7 +48,7 @@ func CreateOrder(userID uint, order cb.Order, attempt ...int) (cb.Order, error) 
 // GetOrder is a recursive function that returns an order equal to the given id once it is settled and not pending.
 func GetOrder(userID uint, orderID string, attempt ...int) (cb.Order, error) {
 
-	u := model.FindUserByID(userID)
+	u := FindUserByID(userID)
 
 	log.Info().
 		Uint("userID", userID).
@@ -106,7 +105,7 @@ func GetOrder(userID uint, orderID string, attempt ...int) (cb.Order, error) {
 // CancelOrder is a recursive function that cancels an order equal to the given id.
 func CancelOrder(userID uint, orderID string, attempt ...int) error {
 
-	u := model.FindUserByID(userID)
+	u := FindUserByID(userID)
 
 	log.Info().
 		Uint("userID", userID).
@@ -141,7 +140,7 @@ func CancelOrder(userID uint, orderID string, attempt ...int) error {
 }
 
 func GetOrders(userID uint, productID string) ([]cb.Order, error) {
-	u := model.FindUserByID(userID)
+	u := FindUserByID(userID)
 	var orders, nextOrders []cb.Order
 	cursor := u.Client().ListOrders(cb.ListOrdersParams{ProductID: productID})
 	for cursor.HasMore {

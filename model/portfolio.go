@@ -3,13 +3,20 @@ package model
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
-	"nuchal-api/service"
 	"nuchal-api/util"
+	"time"
 )
 
 const (
 	zero = "0.0000000000000000"
 )
+
+type Portfolio struct {
+	Time      time.Time  `json:"time"`
+	Positions []Position `json:"positions"`
+	Cash      string     `json:"cash"`
+	Crypto    string     `json:"crypto"`
+}
 
 type Position struct {
 	ProductID          string     `json:"product_id"`
@@ -24,7 +31,7 @@ type Position struct {
 	Orders             []cb.Order `json:"orders"`
 }
 
-func GetPositions(userID uint) ([]Position, error) {
+func GetPortfolio(userID uint) (Portfolio, error) {
 
 	u := FindUserByID(userID)
 
@@ -33,8 +40,11 @@ func GetPositions(userID uint) ([]Position, error) {
 
 	if accounts, err = u.Client().GetAccounts(); err != nil {
 		log.Err(err).Send()
-		return nil, err
+		return Portfolio{}, err
 	}
+
+	var cash string
+	var crypto float64
 
 	var positions []Position
 	for _, account := range accounts {
@@ -43,40 +53,32 @@ func GetPositions(userID uint) ([]Position, error) {
 			continue
 		}
 
+		balance := util.StringToFloat64(account.Balance)
+
 		if account.Currency == "USD" {
-			positions = append(positions, Position{
-				"USD",
-				util.StringToFloat64(account.Balance),
-				0,
-				"$1.00",
-				"$1.00",
-				util.StringToUsd(account.Balance),
-				util.StringToUsd(account.Balance),
-				util.StringToUsd(account.Balance),
-				nil,
-				nil,
-			})
+			cash = util.StringToUsd(account.Balance)
+			positions = append(positions, Position{ProductID: "USD", Balance: balance})
 			continue
 		}
 
 		productID := account.Currency + "-USD"
 
 		var fills []cb.Fill
-		if fills, err = service.GetRemainingBuyFills(userID, productID); err != nil {
+		if fills, err = GetRemainingBuyFills(userID, productID); err != nil {
 			log.Err(err).Send()
-			return nil, err
+			return Portfolio{}, err
 		}
 
 		var orders []cb.Order
-		if orders, err = service.GetOrders(userID, productID); err != nil {
+		if orders, err = GetOrders(userID, productID); err != nil {
 			log.Err(err).Send()
-			return nil, err
+			return Portfolio{}, err
 		}
 
 		var ticker cb.Ticker
 		if ticker, err = u.Client().GetTicker(productID); err != nil {
 			log.Err(err).Send()
-			return nil, err
+			return Portfolio{}, err
 		}
 
 		var sum float64
@@ -84,8 +86,8 @@ func GetPositions(userID uint) ([]Position, error) {
 			sum += util.StringToFloat64(fill.Price)
 		}
 
-		balance := util.StringToFloat64(account.Balance)
 		gross := util.StringToFloat64(ticker.Price) * balance
+		crypto += gross
 		net := gross*u.Taker + gross
 		avg := sum / float64(len(fills))
 
@@ -103,5 +105,5 @@ func GetPositions(userID uint) ([]Position, error) {
 		})
 	}
 
-	return positions, nil
+	return Portfolio{time.Now(), positions, cash, util.FloatToUsd(crypto)}, nil
 }

@@ -1,9 +1,8 @@
-package view
+package model
 
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
-	"nuchal-api/model"
 	"nuchal-api/util"
 	"time"
 )
@@ -35,9 +34,9 @@ func GetQuotes(userID uint) []Quote {
 
 	var quotes []Quote
 
-	u := model.FindUserByID(userID)
+	u := FindUserByID(userID)
 
-	for _, product := range model.ProductArr {
+	for _, product := range ProductArr {
 		ticker, err := u.Client().GetTicker(product.ID())
 		if err != nil {
 			log.Err(err).Send()

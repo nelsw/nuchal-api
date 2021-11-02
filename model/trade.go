@@ -1,14 +1,172 @@
-package service
+package model
 
 import (
 	ws "github.com/gorilla/websocket"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
-	"nuchal-api/model"
 	"nuchal-api/util"
+	"time"
 )
 
-func sell(wsConn *ws.Conn, entry float64, size string, pattern model.Pattern) error {
+func NewTrade(patternID uint) error {
+
+	pattern := FindPatternByID(patternID)
+
+	log.Info().
+		Uint("userID", pattern.UserID).
+		Uint("patternID", pattern.ID).
+		Str("productId", pattern.ProductID).
+		Msg("creating trades")
+
+	var wsDialer ws.Dialer
+	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Uint("userID", pattern.UserID).
+			Uint("patternID", pattern.ID).
+			Str("productId", pattern.ProductID).
+			Msg("error while opening websocket connection")
+		return err
+	}
+
+	defer func(wsConn *ws.Conn) {
+		if err = wsConn.Close(); err != nil {
+			log.Error().
+				Err(err).
+				Uint("userID", pattern.UserID).
+				Uint("patternID", pattern.ID).
+				Str("productId", pattern.ProductID).
+				Msg("error closing websocket connection")
+		}
+	}(wsConn)
+
+	if err = wsConn.WriteJSON(&cb.Message{
+		Type:     "subscribe",
+		Channels: []cb.MessageChannel{{"ticker", []string{pattern.ProductID}}},
+	}); err != nil {
+		log.Error().
+			Err(err).
+			Uint("userID", pattern.UserID).
+			Uint("patternID", pattern.ID).
+			Str("productId", pattern.ProductID).
+			Msg("error writing message to websocket")
+		return err
+	}
+
+	runTrades(wsConn, patternID)
+	return nil
+}
+
+func runTrades(wsConn *ws.Conn, patternID uint) {
+	go newTrade(wsConn, patternID)
+	select {}
+}
+
+func newTrade(wsConn *ws.Conn, patternID uint) {
+
+	var buys int
+	var then, that Rate
+	for {
+
+		pattern := FindPatternByID(patternID)
+
+		if !pattern.Enable {
+			log.Info().
+				Uint("userID", pattern.UserID).
+				Uint("patternID", pattern.ID).
+				Str("productId", pattern.ProductID).
+				Time("bind", time.UnixMilli(pattern.Bind)).
+				Msg("pattern no longer enabled")
+			return
+		}
+
+		if time.Now().After(time.UnixMilli(pattern.Bind)) {
+			log.Info().
+				Uint("userID", pattern.UserID).
+				Uint("patternID", pattern.ID).
+				Str("productId", pattern.ProductID).
+				Time("bind", time.UnixMilli(pattern.Bind)).
+				Msg("pattern reached Bind")
+			return
+		}
+
+		this, err := getRate(wsConn, pattern.ProductID)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Uint("userID", pattern.UserID).
+				Uint("patternID", pattern.ID).
+				Str("productId", pattern.ProductID).
+				Msg("error getting rate")
+
+			then = Rate{}
+			that = Rate{}
+
+			continue
+		}
+
+		if pattern.MatchesTweezerBottomPattern(then, that, this) {
+			go buyBabyBuy(wsConn, pattern)
+			buys++
+			if pattern.Break >= buys {
+				log.Info().
+					Uint("userID", pattern.UserID).
+					Uint("patternID", pattern.ID).
+					Str("productId", pattern.ProductID).
+					Int("bind", buys).
+					Msg("pattern reached Buys")
+			}
+		}
+
+		then = that
+		that = this
+	}
+}
+
+func buyBabyBuy(wsConn *ws.Conn, pattern Pattern) {
+
+	log.Info().
+		Uint("userID", pattern.UserID).
+		Uint("patternID", pattern.ID).
+		Str("productId", pattern.ProductID).
+		Msg("buy")
+
+	order, err := CreateOrder(pattern.UserID, pattern.NewMarketEntryOrder())
+
+	if err != nil {
+		log.Error().
+			Err(err).
+			Uint("userID", pattern.UserID).
+			Uint("patternID", pattern.ID).
+			Str("productId", pattern.ProductID).
+			Msg("error buying")
+		return
+	}
+
+	log.Info().
+		Uint("userID", pattern.UserID).
+		Uint("patternID", pattern.ID).
+		Str("productId", pattern.ProductID).
+		Str("orderId", order.ID).
+		Msg("created order")
+
+	entry := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
+
+	for {
+		if err = sellBabySell(wsConn, entry, order.Size, pattern); err == nil {
+			log.Error().
+				Err(err).
+				Uint("userID", pattern.UserID).
+				Uint("patternID", pattern.ID).
+				Str("productId", pattern.ProductID).
+				Msg("error selling")
+			break
+		}
+	}
+}
+
+func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) error {
 
 	goal := pattern.GoalPrice(entry)
 	loss := pattern.LossPrice(entry)
@@ -115,7 +273,7 @@ func sell(wsConn *ws.Conn, entry float64, size string, pattern model.Pattern) er
 
 		for { // if we're here, we placed a stop loss order at our goal and now we try to find a better price
 
-			var rate model.Rate
+			var rate Rate
 
 			if rate, err = getRate(wsConn, pattern.ProductID); err != nil {
 				log.Error().

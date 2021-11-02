@@ -1,8 +1,11 @@
 package model
 
 import (
+	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"gorm.io/gorm"
+	"net/http"
 	"nuchal-api/db"
+	"time"
 )
 
 type User struct {
@@ -10,6 +13,27 @@ type User struct {
 	Api
 	Name  string `json:"name"`
 	Image string `json:"image"`
+}
+
+type Api struct {
+	Key    string  `json:"key"`
+	Pass   string  `json:"pass"`
+	Secret string  `json:"secret"`
+	Maker  float64 `json:"maker"`
+	Taker  float64 `json:"taker"`
+}
+
+func (v *Api) Client() *cb.Client {
+	return &cb.Client{
+		"https://api.pro.coinbase.com",
+		v.Secret,
+		v.Key,
+		v.Pass,
+		&http.Client{
+			Timeout: 15 * time.Second,
+		},
+		0,
+	}
 }
 
 func init() {

@@ -1,8 +1,8 @@
-package view
+package model
 
 import (
 	"fmt"
-	"nuchal-api/model"
+
 	"nuchal-api/util"
 	"strconv"
 	"time"
@@ -94,15 +94,15 @@ func NewSim(userID uint, productID string, alpha, omega int64) Response {
 	trades := Result{trade, Settings{5}, "Trades", nil}
 	chart := Result{candle, Settings{}, productID, nil}
 
-	rates := model.GetAllRatesBetween(userID, productID, alpha, omega)
+	rates := GetAllRatesBetween(userID, productID, alpha, omega)
 	for _, rate := range rates {
 		chart.Data = append(chart.Data, rate.OHLCV())
 	}
-	pattern := model.GetPattern(userID, productID)
-	user := model.FindUserByID(userID)
+	pattern := GetPattern(userID, productID)
+	user := FindUserByID(userID)
 
 	var summaries []Summary
-	var then, that model.Rate
+	var then, that Rate
 	for i, this := range rates {
 
 		trx := len(summaries) + 1
@@ -141,7 +141,7 @@ func NewSim(userID uint, productID string, alpha, omega int64) Response {
 	}
 }
 
-func handleOpportunity(summary *Summary, trades, splits *Result, user model.User, pattern model.Pattern, rates []model.Rate) {
+func handleOpportunity(summary *Summary, trades, splits *Result, user User, pattern Pattern, rates []Rate) {
 
 	var on, off split
 	var in, out action

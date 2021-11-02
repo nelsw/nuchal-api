@@ -252,3 +252,11 @@ func rateParams(alpha, omega time.Time) []cb.GetHistoricRatesParams {
 	}
 	return results
 }
+
+func GetRatesBetween(productID string, alpha, omega int64) Response {
+	var data [][]interface{}
+	for _, rate := range FindRatesBetween(productID, alpha, omega) {
+		data = append(data, rate.OHLCV())
+	}
+	return Response{Result{candle, Settings{}, productID, data}, nil, Analysis{}}
+}

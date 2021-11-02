@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"nuchal-api/model"
 	"nuchal-api/util"
-	"nuchal-api/view"
 	"os"
 	"strconv"
 	"strings"
@@ -65,26 +64,80 @@ func main() {
 
 	router.Use(CORS())
 
-	router.GET("/rates/:productID/:alpha/:omega", findAllRatesBetween)
-
+	/*
+		sim
+	*/
 	router.GET("/sim/:userID/:productID/:alpha/:omega", getSim)
 
+	/*
+		rates
+	*/
+	router.GET("/rates/:productID/:alpha/:omega", findAllRatesBetween)
+
+	/*
+		product
+	*/
 	router.GET("/productArr/:userID", getProductArr)
 	router.GET("/productIDs/:userID", getProductIDs)
 
+	/*
+		quotes
+	*/
 	router.GET("/quotes/:userID", getQuotes)
 
+	/*
+		portfolio
+	*/
+	router.GET("/portfolio/:userID", getPortfolio)
+
+	/*
+		user
+	*/
 	router.PUT("/user", saveUser)
 	router.GET("/users", getUsers)
 	router.GET("/user/:userID", getUserByID)
 	router.DELETE("/user/:userID", deleteUser)
 
+	/*
+		pattern
+	*/
 	router.PUT("/pattern", savePattern)
 	router.GET("/patterns/:userID", getPatterns)
 	router.GET("/pattern/:userID/:patternID", getPattern)
 	router.DELETE("/pattern/:patternID", deletePattern)
 
+	/*
+		trade
+	*/
+	router.POST("/trade/:patternID", startTrading)
+
 	router.Run("localhost:9080")
+}
+
+func startTrading(c *gin.Context) {
+	patternID, err := strconv.Atoi(c.Param("patternID"))
+	if err != nil {
+		log.Err(err).Send()
+		c.Status(400)
+		return
+	}
+	if err = model.NewTrade(uint(patternID)); err != nil {
+		log.Err(err).Send()
+		c.Status(404)
+		return
+	}
+	c.Status(200)
+}
+
+func getPortfolio(c *gin.Context) {
+	userID := userID(c)
+	portfolio, err := model.GetPortfolio(userID)
+	if err != nil {
+		fmt.Println(err)
+		c.Status(500)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, portfolio)
 }
 
 func getSim(c *gin.Context) {
@@ -92,14 +145,14 @@ func getSim(c *gin.Context) {
 	productID := c.Param("productID")
 	alpha := util.StringToInt64(c.Param("alpha"))
 	omega := util.StringToInt64(c.Param("omega"))
-	c.IndentedJSON(http.StatusOK, view.NewSim(userID, productID, alpha, omega))
+	c.IndentedJSON(http.StatusOK, model.NewSim(userID, productID, alpha, omega))
 }
 
 func findAllRatesBetween(c *gin.Context) {
 	productID := c.Param("productID")
 	alpha := util.StringToInt64(c.Param("alpha"))
 	omega := util.StringToInt64(c.Param("omega"))
-	c.IndentedJSON(http.StatusOK, view.FindRatesBetween(productID, alpha, omega))
+	c.IndentedJSON(http.StatusOK, model.FindRatesBetween(productID, alpha, omega))
 }
 
 func deletePattern(c *gin.Context) {
@@ -115,13 +168,13 @@ func deletePattern(c *gin.Context) {
 }
 
 func getPatterns(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, view.GetPatterns(userID(c)))
+	c.IndentedJSON(http.StatusOK, model.GetPatterns(userID(c)))
 }
 
 func getPattern(c *gin.Context) {
 	userID := userID(c)
 	productID := c.Param("productID")
-	c.IndentedJSON(http.StatusOK, view.GetPattern(userID, productID))
+	c.IndentedJSON(http.StatusOK, model.GetPattern(userID, productID))
 }
 
 func savePattern(c *gin.Context) {
@@ -136,7 +189,7 @@ func savePattern(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 	}
 	p.Save()
-	c.IndentedJSON(http.StatusOK, view.GetPattern(p.UserID, p.ProductID))
+	c.IndentedJSON(http.StatusOK, model.GetPattern(p.UserID, p.ProductID))
 }
 
 func deleteUser(c *gin.Context) {
@@ -178,7 +231,7 @@ func getProductArr(c *gin.Context) {
 }
 
 func getQuotes(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, view.GetQuotes(userID(c)))
+	c.IndentedJSON(http.StatusOK, model.GetQuotes(userID(c)))
 }
 
 func userID(c *gin.Context) uint {

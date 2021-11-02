@@ -1,15 +1,14 @@
-package service
+package model
 
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
-	"nuchal-api/model"
 	"nuchal-api/util"
 	"sort"
 )
 
 func GetRemainingBuyFills(userID uint, productID string) ([]cb.Fill, error) {
 
-	u := model.FindUserByID(userID)
+	u := FindUserByID(userID)
 
 	cursor := u.Client().ListFills(cb.ListFillsParams{ProductID: productID})
 
