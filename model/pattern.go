@@ -7,6 +7,7 @@ import (
 	"math"
 	"nuchal-api/db"
 	"nuchal-api/util"
+	"strconv"
 )
 
 // Pattern defines the criteria for matching rates and placing orders.
@@ -17,7 +18,7 @@ type Pattern struct {
 	UserID uint `json:"user_id"`
 
 	// ProductID is concatenation of two currencies. e.g. BTC-USD
-	ProductID string `json:"product_id"`
+	ProductID uint `json:"product_id"`
 
 	// Target is a percentage used to produce the goal sell price from the entry buy price.
 	Target float64 `json:"target"`
@@ -45,7 +46,7 @@ type Pattern struct {
 	// Enable is a flag that allows the system to bind, get bound, and break.
 	Enable bool `json:"enable"`
 
-	Product Product `json:"product" gorm:"embedded"`
+	Product `json:"product" gorm:"embedded"`
 }
 
 func init() {
@@ -98,7 +99,7 @@ func GetPatterns(userID uint) []Pattern {
 	return patterns
 }
 
-func GetPattern(userID uint, productID string) Pattern {
+func GetPattern(userID uint, productID uint) Pattern {
 	var pattern Pattern
 	db.Resolve().
 		Where("user_id = ?", userID).
@@ -109,7 +110,7 @@ func GetPattern(userID uint, productID string) Pattern {
 
 func (p Pattern) NewMarketEntryOrder() cb.Order {
 	return cb.Order{
-		ProductID: p.ProductID,
+		ProductID: strconv.Itoa(int(p.ProductID)),
 		Side:      "buy",
 		Size:      util.FloatToDecimal(p.Size),
 		Type:      "market",
@@ -118,7 +119,7 @@ func (p Pattern) NewMarketEntryOrder() cb.Order {
 
 func (p Pattern) NewMarketExitOrder() cb.Order {
 	return cb.Order{
-		ProductID: p.ProductID,
+		ProductID: strconv.Itoa(int(p.ProductID)),
 		Side:      "sell",
 		Size:      util.FloatToDecimal(p.Size),
 		Type:      "market",
@@ -128,7 +129,7 @@ func (p Pattern) NewMarketExitOrder() cb.Order {
 func (p Pattern) NewStopEntryOrder(size string, price float64) cb.Order {
 	return cb.Order{
 		Price:     precisePrice(p.ProductID, price),
-		ProductID: p.ProductID,
+		ProductID: strconv.Itoa(int(p.ProductID)),
 		Side:      "sell",
 		Size:      size,
 		Type:      "limit",
@@ -140,7 +141,7 @@ func (p Pattern) NewStopEntryOrder(size string, price float64) cb.Order {
 func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 	return cb.Order{
 		Price:     precisePrice(p.ProductID, price),
-		ProductID: p.ProductID,
+		ProductID: strconv.Itoa(int(p.ProductID)),
 		Side:      "sell",
 		Size:      size,
 		Type:      "limit",
@@ -149,28 +150,28 @@ func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 	}
 }
 
-func FindPatterns(userID uint) []Pattern {
+//func FindPatterns(userID uint) []Pattern {
+//
+//	_ = InitProducts(userID)
+//
+//	var patterns []Pattern
+//	for _, p := range GetPatterns(userID) {
+//		pattern := Pattern{
+//			Product: ProductMap[strconv.Itoa(int(p.ProductID))],
+//		}
+//		patterns = append(patterns, pattern)
+//	}
+//
+//	return patterns
+//}
+//
+//func FindPattern(userID uint, productID uint) Pattern {
+//	p := GetPattern(userID, productID)
+//	p.Product = ProductMap[strconv.Itoa(int(productID))]
+//	return p
+//}
 
-	_ = InitProducts(userID)
-
-	var patterns []Pattern
-	for _, p := range GetPatterns(userID) {
-		pattern := Pattern{
-			Product: ProductMap[p.ProductID],
-		}
-		patterns = append(patterns, pattern)
-	}
-
-	return patterns
-}
-
-func FindPattern(userID uint, productID string) Pattern {
-	p := GetPattern(userID, productID)
-	p.Product = ProductMap[productID]
-	return p
-}
-
-func precisePrice(productID string, price float64) string {
+func precisePrice(productID uint, price float64) string {
 	product := ProductMap[productID]
 	format := "%." + product.QuoteIncrement + "f"
 	return fmt.Sprintf(format, price)

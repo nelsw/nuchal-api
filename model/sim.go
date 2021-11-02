@@ -88,11 +88,11 @@ func (s split) toData() []interface{} {
 	return []interface{}{s.UnixMilli(), s.text, s.sideType, s.color, s.place}
 }
 
-func NewSim(userID uint, productID string, alpha, omega int64) Response {
+func NewSim(userID uint, productID uint, alpha, omega int64) Response {
 
 	splits := Result{splitter, Settings{10}, "Splits", nil}
 	trades := Result{trade, Settings{5}, "Trades", nil}
-	chart := Result{candle, Settings{}, productID, nil}
+	chart := Result{candle, Settings{}, strconv.Itoa(int(productID)), nil}
 
 	rates := GetAllRatesBetween(userID, productID, alpha, omega)
 	for _, rate := range rates {

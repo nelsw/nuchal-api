@@ -8,14 +8,14 @@ import (
 	"time"
 )
 
-func SaveTodayRatesFor(userID uint, productID string) error {
+func SaveTodayRatesFor(userID uint, productID uint) error {
 
 	if err := InitProducts(userID); err != nil {
 		log.Err(err).Send()
 		return err
 	}
 
-	log.Trace().Str("productID", productID).Send()
+	log.Trace().Uint("productID", productID).Send()
 
 	omega := time.Now()
 	alpha := time.Date(omega.Year(), omega.Month(), omega.Day(), 0, 0, 0, 0, time.UTC)
@@ -45,7 +45,7 @@ func SaveAllNewRates(userID uint) error {
 
 	for _, productID := range ProductIDs {
 
-		log.Trace().Str("productID", productID).Send()
+		log.Trace().Uint("productID", productID).Send()
 
 		t := getLastRateTime(productID)
 
@@ -68,7 +68,7 @@ func SaveAllNewRates(userID uint) error {
 	return nil
 }
 
-func getLastRateTime(productID string) time.Time {
+func getLastRateTime(productID uint) time.Time {
 	var rate Rate
 	db.Resolve().
 		Where("product_id = ?", productID).
@@ -77,7 +77,7 @@ func getLastRateTime(productID string) time.Time {
 	return rate.Time()
 }
 
-func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
+func getRate(wsConn *ws.Conn, productID uint) (Rate, error) {
 
 	end := time.Now().Add(time.Minute)
 
@@ -88,7 +88,7 @@ func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 		if err != nil {
 			log.Error().
 				Err(err).
-				Str("productID", productID).
+				Uint("productID", productID).
 				Msg("error getting price")
 			return Rate{}, err
 		}
@@ -110,6 +110,7 @@ func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 			rate := Rate{
 				time.Now().UnixMilli(),
 				productID,
+				Product{},
 				cb.HistoricRate{
 					time.Now(),
 					low,
@@ -121,7 +122,7 @@ func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 			}
 
 			log.Info().
-				Str("productID", productID).
+				Uint("productID", productID).
 				Msg("got rate")
 
 			return rate, nil

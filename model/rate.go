@@ -24,12 +24,14 @@ import (
 	"github.com/rs/zerolog/log"
 	"nuchal-api/db"
 	"sort"
+	"strconv"
 	"time"
 )
 
 type Rate struct {
-	Unix      int64  `json:"unix" gorm:"primaryKey"`
-	ProductID string `json:"product_id" gorm:"primaryKey"`
+	Unix      int64 `json:"unix" gorm:"primaryKey"`
+	ProductID uint  `json:"product_id" gorm:"primaryKey"`
+	Product
 	cb.HistoricRate
 }
 
@@ -42,7 +44,7 @@ func init() {
 	db.Migrate(&Rate{})
 }
 
-func NewRate(productID string, historicRate cb.HistoricRate) Rate {
+func NewRate(productID uint, historicRate cb.HistoricRate) Rate {
 	return Rate{
 		Unix:         historicRate.Time.Unix(),
 		ProductID:    productID,
@@ -99,11 +101,11 @@ func InitRates(userID uint) error {
 	return nil
 }
 
-func InitRate(userID uint, productID string) error {
+func InitRate(userID uint, productID uint) error {
 
 	log.Trace().
 		Uint("userID", userID).
-		Str("productID", productID).
+		Uint("productID", productID).
 		Msg("InitRate")
 
 	alpha := time.Date(2021, 9, 1, 0, 0, 0, 0, time.UTC)
@@ -113,7 +115,7 @@ func InitRate(userID uint, productID string) error {
 
 	log.Trace().
 		Uint("userID", userID).
-		Str("productID", productID).
+		Uint("productID", productID).
 		Time("alpha", alpha).
 		Int("rates", len(rates)).
 		Msg("InitRate")
@@ -123,7 +125,7 @@ func InitRate(userID uint, productID string) error {
 	return nil
 }
 
-func GetAllRatesBetween(userID uint, productID string, alpha, omega int64) []Rate {
+func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate {
 
 	rates := FindRatesBetween(productID, alpha, omega)
 
@@ -145,7 +147,7 @@ func GetAllRatesBetween(userID uint, productID string, alpha, omega int64) []Rat
 	return rates
 }
 
-func FindRatesBetween(productID string, alpha, omega int64) []Rate {
+func FindRatesBetween(productID uint, alpha, omega int64) []Rate {
 
 	var rates []Rate
 
@@ -170,11 +172,11 @@ func FindAllRates(productID string) []Rate {
 	return rates
 }
 
-func GetNewRatesFromTo(userID uint, productID string, alpha, omega time.Time) []Rate {
+func GetNewRatesFromTo(userID uint, productID uint, alpha, omega time.Time) []Rate {
 
 	log.Trace().
 		Uint("userID", userID).
-		Str("productID", productID).
+		Uint("productID", productID).
 		Time("alpha", alpha).
 		Time("omega", omega).
 		Msg("GetNewRatesFromTo")
@@ -195,7 +197,7 @@ func GetNewRatesFromTo(userID uint, productID string, alpha, omega time.Time) []
 	return rates
 }
 
-func GetNewRatesFrom(userID uint, productID string, alpha time.Time) []Rate {
+func GetNewRatesFrom(userID uint, productID uint, alpha time.Time) []Rate {
 
 	var rates []Rate
 
@@ -206,13 +208,13 @@ func GetNewRatesFrom(userID uint, productID string, alpha time.Time) []Rate {
 	}
 
 	for _, rate := range out {
-		rates = append(rates, Rate{rate.Time.Unix(), productID, rate})
+		rates = append(rates, Rate{rate.Time.Unix(), productID, Product{}, rate})
 	}
 
 	return rates
 }
 
-func GetHistoricRates(userID uint, productID string, alpha, omega time.Time) ([]cb.HistoricRate, error) {
+func GetHistoricRates(userID uint, productID uint, alpha, omega time.Time) ([]cb.HistoricRate, error) {
 
 	var rates []cb.HistoricRate
 
@@ -221,7 +223,7 @@ func GetHistoricRates(userID uint, productID string, alpha, omega time.Time) ([]
 	u := FindUserByID(userID)
 
 	for _, p := range params {
-		out, err := u.Client().GetHistoricRates(productID, p)
+		out, err := u.Client().GetHistoricRates(strconv.Itoa(int(productID)), p)
 		if err != nil {
 			log.Err(err).Send()
 			fmt.Println(err)
@@ -253,10 +255,10 @@ func rateParams(alpha, omega time.Time) []cb.GetHistoricRatesParams {
 	return results
 }
 
-func GetRatesBetween(productID string, alpha, omega int64) Response {
+func GetRatesBetween(productID uint, alpha, omega int64) Response {
 	var data [][]interface{}
 	for _, rate := range FindRatesBetween(productID, alpha, omega) {
 		data = append(data, rate.OHLCV())
 	}
-	return Response{Result{candle, Settings{}, productID, data}, nil, Analysis{}}
+	return Response{Result{candle, Settings{}, strconv.Itoa(int(productID)), data}, nil, Analysis{}}
 }

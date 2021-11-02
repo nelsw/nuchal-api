@@ -5,6 +5,7 @@ import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/util"
+	"strconv"
 	"time"
 )
 
@@ -15,7 +16,7 @@ func NewTrade(patternID uint) error {
 	log.Info().
 		Uint("userID", pattern.UserID).
 		Uint("patternID", pattern.ID).
-		Str("productId", pattern.ProductID).
+		Uint("productId", pattern.ProductID).
 		Msg("creating trades")
 
 	var wsDialer ws.Dialer
@@ -25,7 +26,7 @@ func NewTrade(patternID uint) error {
 			Err(err).
 			Uint("userID", pattern.UserID).
 			Uint("patternID", pattern.ID).
-			Str("productId", pattern.ProductID).
+			Uint("productId", pattern.ProductID).
 			Msg("error while opening websocket connection")
 		return err
 	}
@@ -36,20 +37,20 @@ func NewTrade(patternID uint) error {
 				Err(err).
 				Uint("userID", pattern.UserID).
 				Uint("patternID", pattern.ID).
-				Str("productId", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Msg("error closing websocket connection")
 		}
 	}(wsConn)
 
 	if err = wsConn.WriteJSON(&cb.Message{
 		Type:     "subscribe",
-		Channels: []cb.MessageChannel{{"ticker", []string{pattern.ProductID}}},
+		Channels: []cb.MessageChannel{{"ticker", []string{strconv.Itoa(int(pattern.ProductID))}}},
 	}); err != nil {
 		log.Error().
 			Err(err).
 			Uint("userID", pattern.UserID).
 			Uint("patternID", pattern.ID).
-			Str("productId", pattern.ProductID).
+			Uint("productId", pattern.ProductID).
 			Msg("error writing message to websocket")
 		return err
 	}
@@ -75,7 +76,7 @@ func newTrade(wsConn *ws.Conn, patternID uint) {
 			log.Info().
 				Uint("userID", pattern.UserID).
 				Uint("patternID", pattern.ID).
-				Str("productId", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Time("bind", time.UnixMilli(pattern.Bind)).
 				Msg("pattern no longer enabled")
 			return
@@ -85,7 +86,7 @@ func newTrade(wsConn *ws.Conn, patternID uint) {
 			log.Info().
 				Uint("userID", pattern.UserID).
 				Uint("patternID", pattern.ID).
-				Str("productId", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Time("bind", time.UnixMilli(pattern.Bind)).
 				Msg("pattern reached Bind")
 			return
@@ -97,7 +98,7 @@ func newTrade(wsConn *ws.Conn, patternID uint) {
 				Err(err).
 				Uint("userID", pattern.UserID).
 				Uint("patternID", pattern.ID).
-				Str("productId", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Msg("error getting rate")
 
 			then = Rate{}
@@ -113,7 +114,7 @@ func newTrade(wsConn *ws.Conn, patternID uint) {
 				log.Info().
 					Uint("userID", pattern.UserID).
 					Uint("patternID", pattern.ID).
-					Str("productId", pattern.ProductID).
+					Uint("productId", pattern.ProductID).
 					Int("bind", buys).
 					Msg("pattern reached Buys")
 			}
@@ -129,7 +130,7 @@ func buyBabyBuy(wsConn *ws.Conn, pattern Pattern) {
 	log.Info().
 		Uint("userID", pattern.UserID).
 		Uint("patternID", pattern.ID).
-		Str("productId", pattern.ProductID).
+		Uint("productId", pattern.ProductID).
 		Msg("buy")
 
 	order, err := CreateOrder(pattern.UserID, pattern.NewMarketEntryOrder())
@@ -139,7 +140,7 @@ func buyBabyBuy(wsConn *ws.Conn, pattern Pattern) {
 			Err(err).
 			Uint("userID", pattern.UserID).
 			Uint("patternID", pattern.ID).
-			Str("productId", pattern.ProductID).
+			Uint("productId", pattern.ProductID).
 			Msg("error buying")
 		return
 	}
@@ -147,7 +148,7 @@ func buyBabyBuy(wsConn *ws.Conn, pattern Pattern) {
 	log.Info().
 		Uint("userID", pattern.UserID).
 		Uint("patternID", pattern.ID).
-		Str("productId", pattern.ProductID).
+		Uint("productId", pattern.ProductID).
 		Str("orderId", order.ID).
 		Msg("created order")
 
@@ -159,7 +160,7 @@ func buyBabyBuy(wsConn *ws.Conn, pattern Pattern) {
 				Err(err).
 				Uint("userID", pattern.UserID).
 				Uint("patternID", pattern.ID).
-				Str("productId", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Msg("error selling")
 			break
 		}
@@ -173,7 +174,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 
 	log.Info().
 		Uint("userID", pattern.UserID).
-		Str("productID", pattern.ProductID).
+		Uint("productId", pattern.ProductID).
 		Float64("entry", entry).
 		Float64("goal", goal).
 		Float64("loss", loss).
@@ -186,7 +187,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 		log.Error().
 			Err(err).
 			Uint("userID", pattern.UserID).
-			Str("productID", pattern.ProductID).
+			Uint("productId", pattern.ProductID).
 			Msg("error placing stop loss order for loss price price during sell")
 		// just keep going, yolo my brolo
 	}
@@ -199,7 +200,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 			log.Error().
 				Err(err).
 				Uint("userID", pattern.UserID).
-				Str("productID", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Msg("error getting price during sell")
 
 			// can't get price info so create a stop entry order in case the price reaches our goal
@@ -207,7 +208,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 				log.Error().
 					Err(err).
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.ProductID).
+					Uint("productId", pattern.ProductID).
 					Msg("error while creating stop entry order after price error during sell")
 			}
 
@@ -217,7 +218,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 		if price <= loss {
 			log.Info().
 				Uint("userID", pattern.UserID).
-				Str("productID", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Float64("price", price).
 				Float64("exit", loss).
 				Msg("price <= loss, sold")
@@ -230,7 +231,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 
 		log.Info().
 			Uint("userID", pattern.UserID).
-			Str("productID", pattern.ProductID).
+			Uint("productId", pattern.ProductID).
 			Float64("price", price).
 			Float64("goal", goal).
 			Msg("price >= goal")
@@ -242,7 +243,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 			log.Error().
 				Err(err).
 				Uint("userID", pattern.UserID).
-				Str("productID", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Float64("price", price).
 				Float64("goal", goal).
 				Msg("error while creating stop loss order after goal >= price during sell")
@@ -253,7 +254,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 				log.Error().
 					Err(err).
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.ProductID).
+					Uint("productId", pattern.ProductID).
 					Float64("price", price).
 					Float64("goal", goal).
 					Msg("error while creating market exit order after failing to create stop loss order during sell")
@@ -263,7 +264,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 
 			log.Info().
 				Uint("userID", pattern.UserID).
-				Str("productID", pattern.ProductID).
+				Uint("productId", pattern.ProductID).
 				Float64("goal", goal).
 				Float64("exit", util.StringToFloat64(order.ExecutedValue)/util.StringToFloat64(order.Size)).
 				Msg("price >= goal")
@@ -279,7 +280,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 				log.Error().
 					Err(err).
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.ProductID).
+					Uint("productId", pattern.ProductID).
 					Msg("error while getting rate during price climb")
 				continue // since we have a stop loss placed, no harm in continuing onto the next rate
 			}
@@ -287,7 +288,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 			if rate.Low <= goal {
 				log.Info().
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.ProductID).
+					Uint("productId", pattern.ProductID).
 					Float64("rate.Low", rate.Low).
 					Float64("exit", goal).
 					Msg("rate.Low <= goal, sold")
@@ -297,7 +298,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 			if rate.Close > goal {
 				log.Info().
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.ProductID).
+					Uint("productId", pattern.ProductID).
 					Float64("rate.Close", rate.Close).
 					Float64("goal", goal).
 					Msg("rate.Close > goal, we found a better price!")
@@ -306,7 +307,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 					log.Error().
 						Err(err).
 						Uint("userID", pattern.UserID).
-						Str("productID", pattern.ProductID).
+						Uint("productId", pattern.ProductID).
 						Float64("rate.Close", rate.Close).
 						Float64("goal", goal).
 						Msg("error while canceling order during price climb")
@@ -318,7 +319,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 					log.Error().
 						Err(err).
 						Uint("userID", pattern.UserID).
-						Str("productID", pattern.ProductID).
+						Uint("productId", pattern.ProductID).
 						Msg("error while creating stop loss order")
 
 					// sell asap - we have no stops in place
@@ -327,7 +328,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 						log.Error().
 							Err(err).
 							Uint("userID", pattern.UserID).
-							Str("productID", pattern.ProductID).
+							Uint("productId", pattern.ProductID).
 							Float64("price", price).
 							Float64("goal", goal).
 							Msg("error while creating market exit order after failing to create stop loss order during sell")
@@ -336,7 +337,7 @@ func sellBabySell(wsConn *ws.Conn, entry float64, size string, pattern Pattern) 
 
 					log.Info().
 						Uint("userID", pattern.UserID).
-						Str("productID", pattern.ProductID).
+						Uint("productId", pattern.ProductID).
 						Float64("goal", goal).
 						Float64("exit", util.StringToFloat64(order.ExecutedValue)/util.StringToFloat64(order.Size)).
 						Msg("sold")

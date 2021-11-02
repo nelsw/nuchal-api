@@ -14,13 +14,9 @@ type Product struct {
 	cb.Product
 }
 
-func (p Product) ID() string {
-	return p.Product.BaseCurrency + "-" + p.Product.QuoteCurrency
-}
-
-var ProductIDs []string
+var ProductIDs []uint
 var ProductArr []Product
-var ProductMap = map[string]Product{}
+var ProductMap = map[uint]Product{}
 var usdRegex = regexp.MustCompile(`^((\w{3,5})(-USD))$`)
 
 func init() {
@@ -35,12 +31,11 @@ func InitProducts(userID uint) error {
 
 	if len(ProductArr) > 0 {
 		for _, product := range ProductArr {
-			product.Product.ID = product.ID()
-			ProductMap[product.ID()] = product
-			ProductIDs = append(ProductIDs, product.ID())
+			ProductMap[product.Model.ID] = product
+			ProductIDs = append(ProductIDs, product.Model.ID)
 		}
 		sort.SliceStable(ProductIDs, func(i, j int) bool {
-			return strings.Compare(ProductIDs[i], ProductIDs[j]) < 0
+			return ProductIDs[i] < ProductIDs[j]
 		})
 		return nil
 	}
@@ -64,8 +59,8 @@ func InitProducts(userID uint) error {
 		}
 		p := Product{gorm.Model{}, product}
 		db.Resolve().Create(&p)
-		ProductMap[p.ID()] = p
-		ProductIDs = append(ProductIDs, p.ID())
+		ProductMap[p.Model.ID] = p
+		ProductIDs = append(ProductIDs, p.Model.ID)
 		ProductArr = append(ProductArr, p)
 	}
 
