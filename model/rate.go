@@ -20,18 +20,17 @@ package model
 
 import (
 	"fmt"
+	ws "github.com/gorilla/websocket"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/db"
 	"sort"
-	"strconv"
 	"time"
 )
 
 type Rate struct {
-	Unix      int64 `json:"unix" gorm:"primaryKey"`
-	ProductID uint  `json:"product_id" gorm:"primaryKey"`
-	Product
+	Unix      int64  `json:"unix" gorm:"primaryKey"`
+	ProductID string `json:"product_id" gorm:"primaryKey"`
 	cb.HistoricRate
 }
 
@@ -44,7 +43,7 @@ func init() {
 	db.Migrate(&Rate{})
 }
 
-func NewRate(productID uint, historicRate cb.HistoricRate) Rate {
+func NewRate(productID string, historicRate cb.HistoricRate) Rate {
 	return Rate{
 		Unix:         historicRate.Time.Unix(),
 		ProductID:    productID,
@@ -86,36 +85,35 @@ func (v Rate) Stamp() string {
 
 func InitRates(userID uint) error {
 
-	if len(ProductIDs) < 1 {
-		if err := InitProducts(userID); err != nil {
+	if err := InitProducts(userID); err != nil {
+		return err
+	}
+
+	for _, product := range ProductArr {
+		productID := product.BaseCurrency + "-USD"
+		err := InitRate(userID, productID)
+		if err != nil {
 			return err
 		}
 	}
-
-	for _, productID := range ProductIDs {
-		if err := InitRate(userID, productID); err != nil {
-			log.Err(err).Send()
-		}
-	}
-
 	return nil
 }
 
-func InitRate(userID uint, productID uint) error {
+func InitRate(userID uint, productID string) error {
 
 	log.Trace().
 		Uint("userID", userID).
-		Uint("productID", productID).
+		Str("productID", productID).
 		Msg("InitRate")
 
-	alpha := time.Date(2021, 9, 1, 0, 0, 0, 0, time.UTC)
-	omega := time.Date(2021, 10, 1, 0, 0, 0, 0, time.UTC).Add(time.Second * -1)
+	alpha := time.Date(2021, 11, 2, 0, 0, 0, 0, time.UTC)
+	omega := time.Date(2021, 11, 4, 0, 0, 0, 0, time.UTC).Add(time.Second * -1)
 
 	rates := GetNewRatesFromTo(userID, productID, alpha, omega)
 
 	log.Trace().
 		Uint("userID", userID).
-		Uint("productID", productID).
+		Str("productID", productID).
 		Time("alpha", alpha).
 		Int("rates", len(rates)).
 		Msg("InitRate")
@@ -125,7 +123,7 @@ func InitRate(userID uint, productID uint) error {
 	return nil
 }
 
-func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate {
+func GetAllRatesBetween(userID uint, productID string, alpha, omega int64) []Rate {
 
 	rates := FindRatesBetween(productID, alpha, omega)
 
@@ -147,7 +145,7 @@ func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate 
 	return rates
 }
 
-func FindRatesBetween(productID uint, alpha, omega int64) []Rate {
+func FindRatesBetween(productID string, alpha, omega int64) []Rate {
 
 	var rates []Rate
 
@@ -160,23 +158,11 @@ func FindRatesBetween(productID uint, alpha, omega int64) []Rate {
 	return rates
 }
 
-func FindAllRates(productID string) []Rate {
-
-	var rates []Rate
-
-	db.Resolve().
-		Where("product_id = ?", productID).
-		Order("unix desc").
-		Find(&rates)
-
-	return rates
-}
-
-func GetNewRatesFromTo(userID uint, productID uint, alpha, omega time.Time) []Rate {
+func GetNewRatesFromTo(userID uint, productID string, alpha, omega time.Time) []Rate {
 
 	log.Trace().
 		Uint("userID", userID).
-		Uint("productID", productID).
+		Str("productID", productID).
 		Time("alpha", alpha).
 		Time("omega", omega).
 		Msg("GetNewRatesFromTo")
@@ -197,7 +183,7 @@ func GetNewRatesFromTo(userID uint, productID uint, alpha, omega time.Time) []Ra
 	return rates
 }
 
-func GetNewRatesFrom(userID uint, productID uint, alpha time.Time) []Rate {
+func GetNewRatesFrom(userID uint, productID string, alpha time.Time) []Rate {
 
 	var rates []Rate
 
@@ -208,13 +194,13 @@ func GetNewRatesFrom(userID uint, productID uint, alpha time.Time) []Rate {
 	}
 
 	for _, rate := range out {
-		rates = append(rates, Rate{rate.Time.Unix(), productID, Product{}, rate})
+		rates = append(rates, Rate{rate.Time.Unix(), productID, rate})
 	}
 
 	return rates
 }
 
-func GetHistoricRates(userID uint, productID uint, alpha, omega time.Time) ([]cb.HistoricRate, error) {
+func GetHistoricRates(userID uint, productID string, alpha, omega time.Time) ([]cb.HistoricRate, error) {
 
 	var rates []cb.HistoricRate
 
@@ -223,7 +209,7 @@ func GetHistoricRates(userID uint, productID uint, alpha, omega time.Time) ([]cb
 	u := FindUserByID(userID)
 
 	for _, p := range params {
-		out, err := u.Client().GetHistoricRates(strconv.Itoa(int(productID)), p)
+		out, err := u.Client().GetHistoricRates(productID, p)
 		if err != nil {
 			log.Err(err).Send()
 			fmt.Println(err)
@@ -255,10 +241,63 @@ func rateParams(alpha, omega time.Time) []cb.GetHistoricRatesParams {
 	return results
 }
 
-func GetRatesBetween(productID uint, alpha, omega int64) Response {
-	var data [][]interface{}
-	for _, rate := range FindRatesBetween(productID, alpha, omega) {
-		data = append(data, rate.OHLCV())
+func getLastRateTime(productID uint) time.Time {
+	var rate Rate
+	db.Resolve().
+		Where("product_id = ?", productID).
+		Order("unix desc").
+		First(&rate)
+	return rate.Time()
+}
+
+func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
+
+	end := time.Now().Add(time.Minute)
+
+	var low, high, open, volume float64
+	for {
+
+		price, err := getPrice(wsConn, productID)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("productID", productID).
+				Msg("error getting price")
+			return Rate{}, err
+		}
+
+		volume++
+
+		if low == 0 {
+			low = price
+			high = price
+			open = price
+		} else if high < price {
+			high = price
+		} else if low > price {
+			low = price
+		}
+
+		if time.Now().After(end) {
+
+			rate := Rate{
+				time.Now().UnixMilli(),
+				productID,
+				cb.HistoricRate{
+					time.Now(),
+					low,
+					high,
+					open,
+					price,
+					volume,
+				},
+			}
+
+			log.Info().
+				Str("productID", productID).
+				Msg("got rate")
+
+			return rate, nil
+		}
 	}
-	return Response{Result{candle, Settings{}, strconv.Itoa(int(productID)), data}, nil, Analysis{}}
 }

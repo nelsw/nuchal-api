@@ -67,7 +67,8 @@ func main() {
 	/*
 		sim
 	*/
-	router.GET("/sim/:userID/:productID/:alpha/:omega", getSim)
+	router.GET("/sim/product/:userID/:productID/:alpha/:omega", getProductSim)
+	router.GET("/sim/pattern/:patternID/:alpha/:omega", getPatternSim)
 
 	/*
 		rates
@@ -77,8 +78,7 @@ func main() {
 	/*
 		product
 	*/
-	router.GET("/productArr/:userID", getProductArr)
-	router.GET("/productIDs/:userID", getProductIDs)
+	router.GET("/products/:userID", getProductArr)
 
 	/*
 		quotes
@@ -103,7 +103,7 @@ func main() {
 	*/
 	router.PUT("/pattern", savePattern)
 	router.GET("/patterns/:userID", getPatterns)
-	router.GET("/pattern/:userID/:patternID", getPattern)
+	router.GET("/pattern/:patternID", getPattern)
 	router.DELETE("/pattern/:patternID", deletePattern)
 
 	/*
@@ -112,6 +112,16 @@ func main() {
 	router.POST("/trade/:patternID", startTrading)
 
 	router.Run("localhost:9080")
+}
+
+func getPattern(c *gin.Context) {
+	patternID, err := strconv.Atoi(c.Param("patternID"))
+	if err != nil {
+		log.Err(err).Send()
+		c.Status(400)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, model.FindPattern(uint(patternID)))
 }
 
 func startTrading(c *gin.Context) {
@@ -140,25 +150,30 @@ func getPortfolio(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, portfolio)
 }
 
-func getSim(c *gin.Context) {
-	userID := userID(c)
+func getPatternSim(c *gin.Context) {
+	alpha := util.StringToInt64(c.Param("alpha"))
+	omega := util.StringToInt64(c.Param("omega"))
+	patternID, err := strconv.Atoi(c.Param("patternID"))
+	if err != nil {
+		log.Err(err).Send()
+	}
+	c.IndentedJSON(http.StatusOK, model.NewPatternSim(uint(patternID), alpha, omega))
+}
+
+func getProductSim(c *gin.Context) {
 	alpha := util.StringToInt64(c.Param("alpha"))
 	omega := util.StringToInt64(c.Param("omega"))
 	productID, err := strconv.Atoi(c.Param("productID"))
 	if err != nil {
 		log.Err(err).Send()
 	}
-	c.IndentedJSON(http.StatusOK, model.NewSim(userID, uint(productID), alpha, omega))
+	c.IndentedJSON(http.StatusOK, model.NewProductSim(userID(c), uint(productID), alpha, omega))
 }
 
 func findAllRatesBetween(c *gin.Context) {
 	alpha := util.StringToInt64(c.Param("alpha"))
 	omega := util.StringToInt64(c.Param("omega"))
-	productID, err := strconv.Atoi(c.Param("productID"))
-	if err != nil {
-		log.Err(err).Send()
-	}
-	c.IndentedJSON(http.StatusOK, model.FindRatesBetween(uint(productID), alpha, omega))
+	c.IndentedJSON(http.StatusOK, model.FindRatesBetween(c.Param("productID"), alpha, omega))
 }
 
 func deletePattern(c *gin.Context) {
@@ -177,15 +192,6 @@ func getPatterns(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, model.GetPatterns(userID(c)))
 }
 
-func getPattern(c *gin.Context) {
-	productID, err := strconv.Atoi(c.Param("productID"))
-	if err != nil {
-		log.Err(err).Send()
-	}
-	userID := userID(c)
-	c.IndentedJSON(http.StatusOK, model.GetPattern(userID, uint(productID)))
-}
-
 func savePattern(c *gin.Context) {
 	data, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
@@ -198,7 +204,7 @@ func savePattern(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 	}
 	p.Save()
-	c.IndentedJSON(http.StatusOK, model.GetPattern(p.UserID, p.ProductID))
+	c.IndentedJSON(http.StatusOK, model.FindPatternByID(p.ID))
 }
 
 func deleteUser(c *gin.Context) {
@@ -230,13 +236,8 @@ func getUserByID(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, user(c))
 }
 
-func getProductIDs(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, model.ProductIDs)
-}
-
 func getProductArr(c *gin.Context) {
-	user(c)
-	c.IndentedJSON(http.StatusOK, model.ProductArr)
+	c.IndentedJSON(http.StatusOK, model.FindAllProducts(userID(c)))
 }
 
 func getQuotes(c *gin.Context) {

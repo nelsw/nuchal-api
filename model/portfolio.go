@@ -7,28 +7,27 @@ import (
 	"time"
 )
 
-const (
-	zero = "0.0000000000000000"
-)
-
 type Portfolio struct {
 	Time      time.Time  `json:"time"`
 	Positions []Position `json:"positions"`
 	Cash      string     `json:"cash"`
 	Crypto    string     `json:"crypto"`
+	Value     string     `json:"value"`
+	Hold      float64    `json:"hold"`
+	Qty       float64    `json:"qty"`
 }
 
 type Position struct {
-	ProductID          string     `json:"product_id"`
-	Balance            float64    `json:"balance"`
-	Hold               float64    `json:"hold"`
-	CurrentTickerPrice string     `json:"current_ticker_price"`
-	AverageFillPrice   string     `json:"average_fill_price"`
-	Gross              string     `json:"gross"`
-	Net                string     `json:"net"`
-	Profit             string     `json:"profit"`
-	Fills              []cb.Fill  `json:"fills,omitempty"`
-	Orders             []cb.Order `json:"orders"`
+	ID      string     `json:"id"`
+	Balance float64    `json:"balance"`
+	Hold    float64    `json:"hold"`
+	Last    string     `json:"last"`
+	Mean    string     `json:"mean"`
+	Gross   string     `json:"gross"`
+	Net     string     `json:"net"`
+	Profit  string     `json:"profit"`
+	Fills   []cb.Fill  `json:"fills,omitempty"`
+	Orders  []cb.Order `json:"orders,omitempty"`
 }
 
 func GetPortfolio(userID uint) (Portfolio, error) {
@@ -43,23 +42,28 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 		return Portfolio{}, err
 	}
 
-	var cash string
-	var crypto float64
+	var cash, qty, crypto, totalBalance, totalHold float64
 
 	var positions []Position
 	for _, account := range accounts {
 
-		if account.Balance == zero && account.Hold == zero {
-			continue
-		}
+		hold := util.StringToFloat64(account.Hold)
+		totalHold += hold
 
 		balance := util.StringToFloat64(account.Balance)
+		totalBalance += balance
 
-		if account.Currency == "USD" {
-			cash = util.StringToUsd(account.Balance)
-			positions = append(positions, Position{ProductID: "USD", Balance: balance})
+		if balance == 0.0 && hold == 0.0 {
 			continue
 		}
+
+		if account.Currency == "USD" {
+			cash = balance
+			positions = append(positions, Position{ID: "USD", Balance: balance})
+			continue
+		}
+
+		qty++
 
 		productID := account.Currency + "-USD"
 
@@ -94,7 +98,7 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 		positions = append(positions, Position{
 			productID,
 			balance,
-			util.StringToFloat64(account.Hold),
+			hold,
 			util.StringToUsd(ticker.Price),
 			util.FloatToUsd(avg),
 			util.FloatToUsd(gross),
@@ -105,5 +109,13 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 		})
 	}
 
-	return Portfolio{time.Now(), positions, cash, util.FloatToUsd(crypto)}, nil
+	return Portfolio{
+		time.Now(),
+		positions,
+		util.FloatToUsd(cash),
+		util.FloatToUsd(crypto),
+		util.FloatToUsd(cash + crypto),
+		totalHold,
+		qty,
+	}, nil
 }

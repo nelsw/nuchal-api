@@ -7,53 +7,17 @@ import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/util"
-	"strconv"
 )
 
-func GetPrice(productID uint) (float64, error) {
-
-	var wsDialer ws.Dialer
-	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Uint("productID", productID).
-			Msg("error while opening websocket connection")
-		return 0, err
-	}
-
-	defer func(wsConn *ws.Conn) {
-		if err := wsConn.Close(); err != nil {
-			log.Error().
-				Err(err).
-				Uint("productID", productID).
-				Msg("error closing websocket connection")
-		}
-	}(wsConn)
-
-	if err := wsConn.WriteJSON(&cb.Message{
-		Type:     "subscribe",
-		Channels: []cb.MessageChannel{{"ticker", []string{strconv.Itoa(int(productID))}}},
-	}); err != nil {
-		log.Error().
-			Err(err).
-			Uint("productID", productID).
-			Msg("error writing message to websocket")
-		return 0, err
-	}
-
-	return getPrice(wsConn, productID)
-}
-
 // getPrice gets the latest ticker price for the given productId.
-func getPrice(wsConn *ws.Conn, productID uint) (float64, error) {
+func getPrice(wsConn *ws.Conn, productID string) (float64, error) {
 
 	var receivedMessage cb.Message
 	for {
 		if err := wsConn.ReadJSON(&receivedMessage); err != nil {
 			log.Error().
 				Err(err).
-				Uint("productID", productID).
+				Str("productID", productID).
 				Msg("error reading from websocket")
 			return 0, err
 		}
@@ -66,7 +30,7 @@ func getPrice(wsConn *ws.Conn, productID uint) (float64, error) {
 		err := errors.New(fmt.Sprintf("message type != ticker, %v", receivedMessage))
 		log.Error().
 			Err(err).
-			Uint("productID", productID).
+			Str("productID", productID).
 			Msg("error getting ticker message from websocket")
 		return 0, err
 	}

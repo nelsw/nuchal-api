@@ -7,7 +7,7 @@ import (
 	"math"
 	"nuchal-api/db"
 	"nuchal-api/util"
-	"strconv"
+	"strings"
 )
 
 // Pattern defines the criteria for matching rates and placing orders.
@@ -17,8 +17,8 @@ type Pattern struct {
 	// UserId
 	UserID uint `json:"user_id"`
 
-	// ProductID is concatenation of two currencies. e.g. BTC-USD
-	ProductID uint `json:"product_id"`
+	// Currency is concatenation of two currencies. e.g. BTC-USD
+	ProductID uint `json:"product_id" gorm:"product_id"`
 
 	// Target is a percentage used to produce the goal sell price from the entry buy price.
 	Target float64 `json:"target"`
@@ -46,11 +46,15 @@ type Pattern struct {
 	// Enable is a flag that allows the system to bind, get bound, and break.
 	Enable bool `json:"enable"`
 
-	Product `json:"product" gorm:"embedded"`
+	Product Product `json:"product"`
 }
 
 func init() {
 	db.Migrate(&Pattern{})
+}
+
+func (p Pattern) Currency() string {
+	return p.Product.BaseCurrency + "-" + p.Product.QuoteCurrency
 }
 
 func (p *Pattern) GoalPrice(price float64) float64 {
@@ -70,13 +74,12 @@ func (p *Pattern) MatchesTweezerBottomPattern(then, that, this Rate) bool {
 		math.Abs(math.Min(that.Low, that.Close)-math.Min(this.Low, this.Open)) <= p.Delta
 }
 
-func (p Pattern) Save() Pattern {
-	if p.ID > 0 {
-		db.Resolve().Save(&p)
+func (p *Pattern) Save() {
+	if p.Model.ID > 0 {
+		db.Resolve().Save(p)
 	} else {
-		db.Resolve().Create(&p)
+		db.Resolve().Create(p)
 	}
-	return p
 }
 
 func DeletePattern(patternID uint) {
@@ -86,7 +89,8 @@ func DeletePattern(patternID uint) {
 func FindPatternByID(patternID uint) Pattern {
 	var pattern Pattern
 	db.Resolve().
-		Where("id = ?", pattern).
+		Preload("Product").
+		Where("id = ?", patternID).
 		Find(&pattern)
 	return pattern
 }
@@ -94,14 +98,25 @@ func FindPatternByID(patternID uint) Pattern {
 func GetPatterns(userID uint) []Pattern {
 	var patterns []Pattern
 	db.Resolve().
+		Preload("Product").
 		Where("user_id = ?", userID).
 		Find(&patterns)
 	return patterns
 }
 
+func FindPattern(id uint) Pattern {
+	var pattern Pattern
+	db.Resolve().
+		Preload("Product").
+		Where("id = ?", id).
+		Find(&pattern)
+	return pattern
+}
+
 func GetPattern(userID uint, productID uint) Pattern {
 	var pattern Pattern
 	db.Resolve().
+		Preload("Product").
 		Where("user_id = ?", userID).
 		Where("product_id = ?", productID).
 		Find(&pattern)
@@ -110,7 +125,7 @@ func GetPattern(userID uint, productID uint) Pattern {
 
 func (p Pattern) NewMarketEntryOrder() cb.Order {
 	return cb.Order{
-		ProductID: strconv.Itoa(int(p.ProductID)),
+		ProductID: p.Currency(),
 		Side:      "buy",
 		Size:      util.FloatToDecimal(p.Size),
 		Type:      "market",
@@ -119,7 +134,7 @@ func (p Pattern) NewMarketEntryOrder() cb.Order {
 
 func (p Pattern) NewMarketExitOrder() cb.Order {
 	return cb.Order{
-		ProductID: strconv.Itoa(int(p.ProductID)),
+		ProductID: p.Currency(),
 		Side:      "sell",
 		Size:      util.FloatToDecimal(p.Size),
 		Type:      "market",
@@ -128,24 +143,24 @@ func (p Pattern) NewMarketExitOrder() cb.Order {
 
 func (p Pattern) NewStopEntryOrder(size string, price float64) cb.Order {
 	return cb.Order{
-		Price:     precisePrice(p.ProductID, price),
-		ProductID: strconv.Itoa(int(p.ProductID)),
+		Price:     p.precisePrice(price),
+		ProductID: p.Currency(),
 		Side:      "sell",
 		Size:      size,
 		Type:      "limit",
-		StopPrice: precisePrice(p.ProductID, price),
+		StopPrice: p.precisePrice(price),
 		Stop:      "entry",
 	}
 }
 
 func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 	return cb.Order{
-		Price:     precisePrice(p.ProductID, price),
-		ProductID: strconv.Itoa(int(p.ProductID)),
+		Price:     p.precisePrice(price),
+		ProductID: p.Currency(),
 		Side:      "sell",
 		Size:      size,
 		Type:      "limit",
-		StopPrice: precisePrice(p.ProductID, price),
+		StopPrice: p.precisePrice(price),
 		Stop:      "loss",
 	}
 }
@@ -157,7 +172,7 @@ func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 //	var patterns []Pattern
 //	for _, p := range GetPatterns(userID) {
 //		pattern := Pattern{
-//			Product: ProductMap[strconv.Itoa(int(p.ProductID))],
+//			Product: ProductMap[strconv.Itoa(int(p.Currency))],
 //		}
 //		patterns = append(patterns, pattern)
 //	}
@@ -171,8 +186,10 @@ func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 //	return p
 //}
 
-func precisePrice(productID uint, price float64) string {
-	product := ProductMap[productID]
-	format := "%." + product.QuoteIncrement + "f"
-	return fmt.Sprintf(format, price)
+func (p Pattern) precisePrice(price float64) string {
+	return fmt.Sprintf("%"+fmt.Sprintf(".%df", len(strings.Split(p.Product.QuoteIncrement, ".")[1])), price)
+}
+
+func (p Pattern) Wat(price float64) string {
+	return p.precisePrice(price)
 }

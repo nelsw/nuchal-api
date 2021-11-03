@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"gorm.io/gorm"
 	"nuchal-api/db"
@@ -66,4 +67,24 @@ func InitProducts(userID uint) error {
 
 	return nil
 
+}
+
+func FindAllProducts(userID uint) []Product {
+	err := InitProducts(userID)
+	if err != nil {
+		fmt.Println(err)
+	}
+	var products []Product
+	db.Resolve().Find(&products)
+	return products
+}
+
+func FindProductByProductID(productID string) Product {
+	var product Product
+	chunks := strings.Split(productID, "-")
+	db.Resolve().
+		Where("base_currency = ?", chunks[0]).
+		Where("quote_currency = ?", chunks[1]).
+		Find(&product)
+	return product
 }

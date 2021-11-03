@@ -88,18 +88,25 @@ func (s split) toData() []interface{} {
 	return []interface{}{s.UnixMilli(), s.text, s.sideType, s.color, s.place}
 }
 
-func NewSim(userID uint, productID uint, alpha, omega int64) Response {
+func NewProductSim(userID uint, productID uint, alpha, omega int64) Response {
+	return newSwim(GetPattern(userID, productID), alpha, omega)
+}
+
+func NewPatternSim(patternID uint, alpha, omega int64) Response {
+	return newSwim(FindPatternByID(patternID), alpha, omega)
+}
+
+func newSwim(pattern Pattern, alpha, omega int64) Response {
 
 	splits := Result{splitter, Settings{10}, "Splits", nil}
 	trades := Result{trade, Settings{5}, "Trades", nil}
-	chart := Result{candle, Settings{}, strconv.Itoa(int(productID)), nil}
+	chart := Result{candle, Settings{}, pattern.Currency(), nil}
 
-	rates := GetAllRatesBetween(userID, productID, alpha, omega)
+	rates := GetAllRatesBetween(pattern.UserID, pattern.Currency(), alpha, omega)
 	for _, rate := range rates {
 		chart.Data = append(chart.Data, rate.OHLCV())
 	}
-	pattern := GetPattern(userID, productID)
-	user := FindUserByID(userID)
+	user := FindUserByID(pattern.UserID)
 
 	var summaries []Summary
 	var then, that Rate

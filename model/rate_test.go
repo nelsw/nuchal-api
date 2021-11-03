@@ -34,7 +34,7 @@ func init() {
 
 var (
 	userID    = uint(1)
-	productID = "BTC-USD"
+	productID = "ALGO-USD"
 	omega     = time.Now().Unix()
 	alpha     = time.Now().Add(time.Hour * 24 * 7 * -1).Unix()
 )
@@ -42,4 +42,18 @@ var (
 func TestFindRatesBetween(t *testing.T) {
 	rates := FindRatesBetween(productID, alpha, omega)
 	fmt.Println(len(rates))
+}
+
+//func TestInitRate(t *testing.T) {
+//	if err := InitRate(userID, "ALGO-USD"); err != nil {
+//		fmt.Println(err)
+//		t.Fail()
+//	}
+//}
+//
+func TestInitRates(t *testing.T) {
+	if err := InitRates(userID); err != nil {
+		fmt.Println(err)
+		t.Fail()
+	}
 }
