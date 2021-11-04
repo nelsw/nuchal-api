@@ -3,6 +3,8 @@ package model
 import (
 	"fmt"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"math"
 	"nuchal-api/db"
@@ -53,6 +55,16 @@ func init() {
 	db.Migrate(&Pattern{})
 }
 
+func (p Pattern) Logger() *zerolog.Logger {
+	logger := log.
+		With().
+		Uint("userID", p.UserID).
+		Uint("patternID", p.Model.ID).
+		Str("productID", p.Currency()).
+		Logger()
+	return &logger
+}
+
 func (p Pattern) Currency() string {
 	return p.Product.BaseCurrency + "-" + p.Product.QuoteCurrency
 }
@@ -80,6 +92,12 @@ func (p *Pattern) Save() {
 	} else {
 		db.Resolve().Create(p)
 	}
+}
+
+func (p Pattern) Run(e *zerolog.Event, level zerolog.Level, msg string) {
+	e.Uint("userID", p.UserID).
+		Uint("patternID", p.Model.ID).
+		Str("productID", p.Currency())
 }
 
 func DeletePattern(patternID uint) {

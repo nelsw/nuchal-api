@@ -131,11 +131,7 @@ func startTrading(c *gin.Context) {
 		c.Status(400)
 		return
 	}
-	if err = model.NewTrade(uint(patternID)); err != nil {
-		log.Err(err).Send()
-		c.Status(404)
-		return
-	}
+	model.NewTrade(uint(patternID))
 	c.Status(200)
 }
 

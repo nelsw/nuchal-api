@@ -2,37 +2,51 @@ package model
 
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/util"
 	"time"
 )
 
+type ord cb.Order
+
+func (o ord) event() *zerolog.Event {
+	return log.Log().Str("orderID", o.ID)
+}
+
+func (o ord) l() *zerolog.Logger {
+	logger := log.
+		With().
+		Str("orderID", o.ID).
+		Logger()
+	return &logger
+}
+
+type SeverityHook struct{}
+
+func (h SeverityHook) Run(e *zerolog.Event, level zerolog.Level, msg string) {
+	if level != zerolog.NoLevel {
+		e.Str("severity", level.String())
+	}
+}
+
 // CreateOrder creates an order on Coinbase and returns the order once it is no longer pending and has settled.
-func CreateOrder(userID uint, order cb.Order, attempt ...int) (cb.Order, error) {
+func CreateOrder(pattern Pattern, order cb.Order, attempt ...int) (cb.Order, error) {
 
-	u := FindUserByID(userID)
+	u := FindUserByID(pattern.UserID)
 
-	log.Info().
-		Uint("userID", userID).
-		Str("orderID", order.ID).
-		Msg("create order")
+	pattern.Logger().Info().Str("orderID", order.ID).Msg("create order")
 
 	r, err := u.Client().CreateOrder(&order)
 	if err == nil {
 
-		log.Info().
-			Uint("userID", userID).
-			Str("orderID", order.ID).
-			Msg("created order")
+		pattern.Logger().Info().Str("orderID", order.ID).Msg("created order")
 
-		return GetOrder(userID, r.ID)
+		return GetOrder(pattern, r.ID)
 	}
 
 	if err != nil {
-		log.Err(err).
-			Uint("userID", userID).
-			Str("orderID", order.ID).
-			Msg("error creating order")
+		pattern.Logger().Error().Err(err).Str("orderID", order.ID).Msg("order")
 	}
 
 	i := util.FirstIntOrZero(attempt)
@@ -42,18 +56,15 @@ func CreateOrder(userID uint, order cb.Order, attempt ...int) (cb.Order, error) 
 
 	i++
 	time.Sleep(time.Duration(i*3) * time.Second)
-	return CreateOrder(userID, order, i)
+	return CreateOrder(pattern, order, i)
 }
 
 // GetOrder is a recursive function that returns an order equal to the given id once it is settled and not pending.
-func GetOrder(userID uint, orderID string, attempt ...int) (cb.Order, error) {
+func GetOrder(pattern Pattern, orderID string, attempt ...int) (cb.Order, error) {
 
-	u := FindUserByID(userID)
+	u := FindUserByID(pattern.UserID)
 
-	log.Info().
-		Uint("userID", userID).
-		Str("orderID", orderID).
-		Msg("get order")
+	pattern.Logger().Info().Str("orderID", orderID).Msg("get order")
 
 	order, err := u.Client().GetOrder(orderID)
 
@@ -61,9 +72,8 @@ func GetOrder(userID uint, orderID string, attempt ...int) (cb.Order, error) {
 
 		i := util.FirstIntOrZero(attempt)
 
-		log.Error().
+		pattern.Logger().Error().
 			Err(err).
-			Uint("userID", userID).
 			Str("orderID", orderID).
 			Int("attempt", i).
 			Msg("error getting order")
@@ -73,27 +83,23 @@ func GetOrder(userID uint, orderID string, attempt ...int) (cb.Order, error) {
 		}
 
 		i++
-		time.Sleep(time.Duration(i) * time.Second)
-		return GetOrder(userID, orderID, i)
+		time.Sleep(time.Duration(i*3) * time.Second)
+		return GetOrder(pattern, orderID, i)
 	}
 
 	if !order.Settled || order.Status == "pending" {
 
-		log.Warn().
-			Uint("userID", userID).
-			Str("product", order.ProductID).
+		pattern.Logger().Warn().
 			Str("orderID", orderID).
 			Str("side", order.Side).
 			Str("type", order.Type).
 			Msg("got order, but it's pending or unsettled")
 
 		time.Sleep(1 * time.Second)
-		return GetOrder(userID, orderID, 0)
+		return GetOrder(pattern, orderID, 0)
 	}
 
-	log.Info().
-		Uint("userID", userID).
-		Str("product", order.ProductID).
+	pattern.Logger().Info().
 		Str("orderID", orderID).
 		Str("side", order.Side).
 		Str("type", order.Type).
@@ -103,28 +109,21 @@ func GetOrder(userID uint, orderID string, attempt ...int) (cb.Order, error) {
 }
 
 // CancelOrder is a recursive function that cancels an order equal to the given id.
-func CancelOrder(userID uint, orderID string, attempt ...int) error {
+func CancelOrder(pattern Pattern, orderID string, attempt ...int) error {
 
-	u := FindUserByID(userID)
+	u := FindUserByID(pattern.UserID)
 
-	log.Info().
-		Uint("userID", userID).
-		Str("orderID", orderID).
-		Msg("cancel order")
+	pattern.Logger().Info().Str("orderID", orderID).Msg("cancel order")
 
 	err := u.Client().CancelOrder(orderID)
 	if err == nil {
-		log.Info().
-			Uint("userID", userID).
-			Str("orderID", orderID).
-			Msg("canceled order")
+		pattern.Logger().Info().Str("orderID", orderID).Msg("canceled order")
 		return nil
 	}
 
 	i := util.FirstIntOrZero(attempt)
-	log.Error().
+	pattern.Logger().Error().
 		Err(err).
-		Uint("userID", userID).
 		Str("orderID", orderID).
 		Int("attempt", i).
 		Msg("error canceling order")
@@ -134,9 +133,9 @@ func CancelOrder(userID uint, orderID string, attempt ...int) error {
 	}
 
 	i++
-	time.Sleep(time.Duration(i) * time.Second)
+	time.Sleep(time.Duration(i*3) * time.Second)
 
-	return CancelOrder(userID, orderID, i)
+	return CancelOrder(pattern, orderID, i)
 }
 
 func GetOrders(userID uint, productID string) ([]cb.Order, error) {

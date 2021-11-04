@@ -30,6 +30,9 @@ type Position struct {
 	Orders  []cb.Order `json:"orders,omitempty"`
 }
 
+type Posture struct {
+}
+
 func GetPortfolio(userID uint) (Portfolio, error) {
 
 	u := FindUserByID(userID)
@@ -68,7 +71,7 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 		productID := account.Currency + "-USD"
 
 		var fills []cb.Fill
-		if fills, err = GetRemainingBuyFills(userID, productID); err != nil {
+		if fills, err = GetRemainingBuyFills(userID, productID, balance); err != nil {
 			log.Err(err).Send()
 			return Portfolio{}, err
 		}

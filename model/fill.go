@@ -6,7 +6,7 @@ import (
 	"sort"
 )
 
-func GetRemainingBuyFills(userID uint, productID string) ([]cb.Fill, error) {
+func GetRemainingBuyFills(userID uint, productID string, balance float64) ([]cb.Fill, error) {
 
 	u := FindUserByID(userID)
 
@@ -25,25 +25,20 @@ func GetRemainingBuyFills(userID uint, productID string) ([]cb.Fill, error) {
 	}
 
 	sort.SliceStable(allFills, func(i, j int) bool {
-		return allFills[i].CreatedAt.Time().Before(allFills[j].CreatedAt.Time())
+		return allFills[i].CreatedAt.Time().After(allFills[j].CreatedAt.Time())
 	})
 
-	var buys, sells []cb.Fill
-
+	var buys []cb.Fill
+	var bal float64
 	for _, fill := range allFills {
 		if fill.Side == "buy" {
 			buys = append(buys, fill)
-		} else {
-			sells = append(sells, fill)
+			bal += util.StringToFloat64(fill.Size)
+			if bal == balance {
+				break
+			}
 		}
 	}
 
-	qty := util.MinInt(len(buys), len(sells))
-	result := buys[qty:]
-
-	sort.SliceStable(result, func(i, j int) bool {
-		return result[i].CreatedAt.Time().After(result[j].CreatedAt.Time())
-	})
-
-	return result, nil
+	return buys, nil
 }

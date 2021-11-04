@@ -171,7 +171,6 @@ func GetNewRatesFromTo(userID uint, productID string, alpha, omega time.Time) []
 
 	out, err := GetHistoricRates(userID, productID, alpha, omega)
 	if err != nil {
-		fmt.Println(err)
 		log.Err(err).Send()
 		return rates
 	}
@@ -250,6 +249,32 @@ func getLastRateTime(productID uint) time.Time {
 	return rate.Time()
 }
 
+func rate(productID string) (Rate, error) {
+
+	var wsDialer ws.Dialer
+	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
+	if err != nil {
+		log.Error().Err(err).Msg("opening ws")
+		return Rate{}, err
+	}
+
+	defer func(wsConn *ws.Conn) {
+		if err = wsConn.Close(); err != nil {
+			log.Error().Err(err).Msg("closing ws")
+		}
+	}(wsConn)
+
+	if err = wsConn.WriteJSON(&cb.Message{
+		Type:     "subscribe",
+		Channels: []cb.MessageChannel{{"ticker", []string{productID}}},
+	}); err != nil {
+		log.Error().Err(err).Msg("writing ws")
+		return Rate{}, err
+	}
+
+	return getRate(wsConn, productID)
+}
+
 func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 
 	end := time.Now().Add(time.Minute)
@@ -259,10 +284,7 @@ func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 
 		price, err := getPrice(wsConn, productID)
 		if err != nil {
-			log.Error().
-				Err(err).
-				Str("productID", productID).
-				Msg("error getting price")
+			log.Error().Err(err).Str("productID", productID).Msg("price")
 			return Rate{}, err
 		}
 
@@ -293,9 +315,7 @@ func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 				},
 			}
 
-			log.Info().
-				Str("productID", productID).
-				Msg("got rate")
+			log.Info().Str("productID", productID).Msg("rate")
 
 			return rate, nil
 		}
