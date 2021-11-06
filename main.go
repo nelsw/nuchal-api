@@ -71,11 +71,6 @@ func main() {
 	router.GET("/sim/pattern/:patternID/:alpha/:omega", getPatternSim)
 
 	/*
-		rates
-	*/
-	router.GET("/rates/:productID/:alpha/:omega", findAllRatesBetween)
-
-	/*
 		product
 	*/
 	router.GET("/products/:userID", getProductArr)
@@ -111,7 +106,25 @@ func main() {
 	*/
 	router.POST("/trade/:patternID", startTrading)
 
+	/*
+		order
+	*/
+	router.DELETE("/order/:userID/:orderID", deleteOrder)
+	router.POST("/order", postOrder)
+
 	router.Run("localhost:9080")
+}
+
+func postOrder(c *gin.Context) {
+
+}
+
+func deleteOrder(c *gin.Context) {
+	if err := model.DeleteOrder(userID(c), c.Param("orderID")); err != nil {
+		c.Status(400)
+		return
+	}
+	c.Status(200)
 }
 
 func getPattern(c *gin.Context) {
@@ -164,12 +177,6 @@ func getProductSim(c *gin.Context) {
 		log.Err(err).Send()
 	}
 	c.IndentedJSON(http.StatusOK, model.NewProductSim(userID(c), uint(productID), alpha, omega))
-}
-
-func findAllRatesBetween(c *gin.Context) {
-	alpha := util.StringToInt64(c.Param("alpha"))
-	omega := util.StringToInt64(c.Param("omega"))
-	c.IndentedJSON(http.StatusOK, model.FindRatesBetween(c.Param("productID"), alpha, omega))
 }
 
 func deletePattern(c *gin.Context) {

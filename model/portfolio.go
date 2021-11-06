@@ -106,7 +106,7 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 			util.FloatToUsd(avg),
 			util.FloatToUsd(gross),
 			util.FloatToUsd(net),
-			util.FloatToUsd(net - (avg * balance)),
+			util.FloatToUsd(net - gross),
 			fills,
 			orders,
 		})

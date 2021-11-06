@@ -64,7 +64,8 @@ type Result struct {
 }
 
 type Settings struct {
-	ZIndex int `json:"z-index"`
+	Legend bool `json:"legend"`
+	ZIndex int  `json:"z-index"`
 }
 
 type action struct {
@@ -89,7 +90,16 @@ func (s split) toData() []interface{} {
 }
 
 func NewProductSim(userID uint, productID uint, alpha, omega int64) Response {
-	return newSwim(GetPattern(userID, productID), alpha, omega)
+	pid := FindProductByID(productID).PID()
+	chart := Result{candle, Settings{}, pid, nil}
+
+	rates := GetAllRatesBetween(userID, productID, alpha, omega)
+	for _, rate := range rates {
+		chart.Data = append(chart.Data, rate.OHLCV())
+	}
+	splits := Result{splitter, Settings{false, 10}, "Splits", [][]interface{}{}}
+	trades := Result{trade, Settings{false, 5}, "Trades", [][]interface{}{}}
+	return Response{Chart: chart, OnChart: []Result{trades, splits}}
 }
 
 func NewPatternSim(patternID uint, alpha, omega int64) Response {
@@ -98,11 +108,11 @@ func NewPatternSim(patternID uint, alpha, omega int64) Response {
 
 func newSwim(pattern Pattern, alpha, omega int64) Response {
 
-	splits := Result{splitter, Settings{10}, "Splits", nil}
-	trades := Result{trade, Settings{5}, "Trades", nil}
+	splits := Result{splitter, Settings{false, 10}, "Splits", nil}
+	trades := Result{trade, Settings{false, 5}, "Trades", nil}
 	chart := Result{candle, Settings{}, pattern.Currency(), nil}
 
-	rates := GetAllRatesBetween(pattern.UserID, pattern.Currency(), alpha, omega)
+	rates := GetAllRatesBetween(pattern.UserID, pattern.ProductID, alpha, omega)
 	for _, rate := range rates {
 		chart.Data = append(chart.Data, rate.OHLCV())
 	}
@@ -122,7 +132,7 @@ func newSwim(pattern Pattern, alpha, omega int64) Response {
 			summaries = append(summaries, summary)
 		}
 
-		if pattern.Bound == "Buys" && trx == pattern.Break {
+		if pattern.Bound == "Buys" && trx-1 == pattern.Break {
 			break
 		}
 

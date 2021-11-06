@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"nuchal-api/util"
 	"os"
 	"strings"
 	"testing"
@@ -34,26 +35,17 @@ func init() {
 
 var (
 	userID    = uint(1)
-	productID = "ALGO-USD"
+	productID = uint(1)
 	omega     = time.Now().Unix()
 	alpha     = time.Now().Add(time.Hour * 24 * 7 * -1).Unix()
 )
 
-func TestFindRatesBetween(t *testing.T) {
-	rates := FindRatesBetween(productID, alpha, omega)
-	fmt.Println(len(rates))
-}
+func TestGetAllRatesBetween(t *testing.T) {
 
-//func TestInitRate(t *testing.T) {
-//	if err := InitRate(userID, "ALGO-USD"); err != nil {
-//		fmt.Println(err)
-//		t.Fail()
-//	}
-//}
-//
-func TestInitRates(t *testing.T) {
-	if err := InitRates(userID); err != nil {
-		fmt.Println(err)
-		t.Fail()
-	}
+	fmt.Println(time.Unix(1636082173, 0))
+	fmt.Println(time.Unix(1633403773, 0))
+
+	rates := GetAllRatesBetween(userID, productID, 1633403773, 1636082173)
+	util.PrettyPrint(rates)
+
 }

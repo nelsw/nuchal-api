@@ -15,13 +15,33 @@ type Product struct {
 	cb.Product
 }
 
+type Crypto struct {
+	gorm.Model
+	Symbol string  `json:"symbol"`
+	Quote  string  `json:"quote"`
+	Min    float64 `json:"min"`
+	Max    int     `json:"max"`
+	Step   float64 `json:"step"`
+}
+
+type Currency struct {
+	gorm.Model
+	Symbol string `json:"symbol"`
+	Name   string `json:"name"`
+}
+
 var ProductIDs []uint
 var ProductArr []Product
 var ProductMap = map[uint]Product{}
 var usdRegex = regexp.MustCompile(`^((\w{3,5})(-USD))$`)
 
 func init() {
+	db.Migrate(&Currency{})
 	db.Migrate(&Product{})
+}
+
+func (p Product) PID() string {
+	return p.BaseCurrency + "-" + p.QuoteCurrency
 }
 
 func InitProducts(userID uint) error {
@@ -85,6 +105,14 @@ func FindProductByProductID(productID string) Product {
 	db.Resolve().
 		Where("base_currency = ?", chunks[0]).
 		Where("quote_currency = ?", chunks[1]).
+		Find(&product)
+	return product
+}
+
+func FindProductByID(productID uint) Product {
+	var product Product
+	db.Resolve().
+		Where("id = ?", productID).
 		Find(&product)
 	return product
 }

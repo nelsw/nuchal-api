@@ -2,33 +2,10 @@ package model
 
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/util"
 	"time"
 )
-
-type ord cb.Order
-
-func (o ord) event() *zerolog.Event {
-	return log.Log().Str("orderID", o.ID)
-}
-
-func (o ord) l() *zerolog.Logger {
-	logger := log.
-		With().
-		Str("orderID", o.ID).
-		Logger()
-	return &logger
-}
-
-type SeverityHook struct{}
-
-func (h SeverityHook) Run(e *zerolog.Event, level zerolog.Level, msg string) {
-	if level != zerolog.NoLevel {
-		e.Str("severity", level.String())
-	}
-}
 
 // CreateOrder creates an order on Coinbase and returns the order once it is no longer pending and has settled.
 func CreateOrder(pattern Pattern, order cb.Order, attempt ...int) (cb.Order, error) {
@@ -149,4 +126,15 @@ func GetOrders(userID uint, productID string) ([]cb.Order, error) {
 		orders = append(orders, nextOrders...)
 	}
 	return orders, nil
+}
+
+func DeleteOrder(userID uint, orderID string) (err error) {
+	u := FindUserByID(userID)
+	if err = u.Client().CancelOrder(orderID); err != nil {
+		log.Info().
+			Uint("userID", userID).
+			Str("orderID", orderID).
+			Msg("canceled order")
+	}
+	return
 }
