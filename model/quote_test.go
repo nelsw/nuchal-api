@@ -7,7 +7,10 @@ import (
 
 func TestGetQuotes(t *testing.T) {
 
-	quotes := GetQuotes(uint(1))
+	quotes, err := GetQuotes()
+	if err != nil {
+		t.Fail()
+	}
 	util.PrettyPrint(quotes)
 
 }

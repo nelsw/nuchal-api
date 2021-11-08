@@ -87,7 +87,7 @@ func buyBabyBuy(pattern Pattern) {
 
 	log.Info().
 		Uint("userID", pattern.UserID).
-		Uint("patternID", pattern.Model.ID).
+		Uint("patternID", pattern.ID).
 		Str("productID", pattern.Currency()).
 		Str("orderId", order.ID).
 		Msg("created order")

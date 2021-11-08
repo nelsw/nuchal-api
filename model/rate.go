@@ -29,9 +29,31 @@ import (
 )
 
 type Rate struct {
-	gorm.Model
-	ProductID       uint `json:"product_id"`
-	cb.HistoricRate `gorm:"embedded"`
+	ProductID  string `json:"product_id" gorm:"primarykey"`
+	UnixSecond int64  `json:"unix_second" gorm:"primarykey"`
+
+	CreatedAt int64          `json:"created_at" gorm:"autoCreateTime:nano"`
+	UpdatedAt int64          `json:"updated_at" gorm:"autoUpdateTime:nano"`
+	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"autoDeleteTime:nano;index"`
+
+	Low     float64 `json:"low"`
+	High    float64 `json:"high"`
+	Open    float64 `json:"open"`
+	Close   float64 `json:"close"`
+	Volume  float64 `json:"volume"`
+	Product Product `json:"product"`
+}
+
+func NewRate(productID string, rate cb.HistoricRate) Rate {
+	return Rate{
+		ProductID:  productID,
+		UnixSecond: rate.Time.Unix(),
+		Low:        rate.Low,
+		High:       rate.High,
+		Open:       rate.Open,
+		Close:      rate.Close,
+		Volume:     rate.Volume,
+	}
 }
 
 func init() {
@@ -51,15 +73,40 @@ func (v *Rate) IsInit() bool {
 }
 
 func (v *Rate) Time() time.Time {
-	return v.HistoricRate.Time
+	return time.Unix(v.UnixSecond, 0)
 }
 
 func (v *Rate) data() []interface{} {
 	return []interface{}{v.Time().UnixMilli(), v.Open, v.High, v.Low, v.Close, v.Volume}
 }
 
+func FindRates(productID string, alpha, omega int64) []Rate {
+	var rates []Rate
+
+	log.Trace().
+		Str("productID", productID).
+		Int64("alpha", alpha).
+		Int64("omega", omega).
+		Msg("find rates")
+
+	db.Resolve().
+		Preload("Product").
+		Where("product_id = ?", productID).
+		Order("unix_second asc").
+		Find(&rates)
+
+	log.Trace().
+		Str("productID", productID).
+		Int64("alpha", alpha).
+		Int64("omega", omega).
+		Int("rates", len(rates)).
+		Msg("find rates")
+
+	return rates
+}
+
 // GetRates is the primary method for getting rates.
-func GetRates(userID uint, productID uint, alpha, omega int64) ([]Rate, error) {
+func GetRates(userID uint, productID string, alpha, omega int64) ([]Rate, error) {
 
 	var rates []Rate
 
@@ -68,8 +115,8 @@ func GetRates(userID uint, productID uint, alpha, omega int64) ([]Rate, error) {
 
 	db.Resolve().
 		Where("product_id = ?", productID).
-		Where("time BETWEEN ? AND ?", from, to).
-		Order("time asc").
+		Where("unix_second BETWEEN ? AND ?", from, to).
+		Order("unix_second asc").
 		Find(&rates)
 
 	size := len(rates)
@@ -80,9 +127,7 @@ func GetRates(userID uint, productID uint, alpha, omega int64) ([]Rate, error) {
 		from = time.Unix(alpha, 0)
 	}
 
-	pid := findPID(productID)
-
-	out, err := GetHistoricRates(userID, pid, from, to)
+	out, err := GetHistoricRates(userID, productID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -91,18 +136,15 @@ func GetRates(userID uint, productID uint, alpha, omega int64) ([]Rate, error) {
 		return out[i].Time.Before(out[j].Time)
 	})
 
+	var newRates []Rate
+
 	for _, rate := range out {
-		rates = append(rates, Rate{HistoricRate: rate})
+		newRates = append(newRates, NewRate(productID, rate))
 	}
 
-	db.Resolve().Create(&rates)
+	db.Resolve().Create(&newRates)
 
-	return rates, nil
-}
-
-func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate {
-	rates, _ := GetRates(userID, productID, alpha, omega)
-	return rates
+	return FindRates(productID, alpha, omega), nil
 }
 
 func GetHistoricRates(userID uint, productID string, alpha, omega time.Time) ([]cb.HistoricRate, error) {
@@ -196,18 +238,16 @@ func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 
 		if time.Now().After(end) {
 
-			rate := Rate{
-				HistoricRate: cb.HistoricRate{
-					time.Now(),
-					low,
-					high,
-					open,
-					price,
-					volume,
-				},
-			}
+			rate := NewRate(productID, cb.HistoricRate{
+				Time:   time.Now().UTC(),
+				Low:    low,
+				High:   high,
+				Open:   open,
+				Close:  price,
+				Volume: volume,
+			})
 
-			log.Info().Str("productID", productID).Msg("rate")
+			log.Info().Interface("rate", rate).Send()
 
 			return rate, nil
 		}

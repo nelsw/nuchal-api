@@ -4,20 +4,8 @@ import (
 	"testing"
 )
 
-func TestJob(t *testing.T) {
-
-	//job := Job{
-	//	UserID:  uint(1),
-	//	JobType: InitAllCBCurrencies,
-	//}
-	//
-	//util.PrettyPrint(job)
-	//
-	//if err := job.Perform(); err != nil {
-	//	t.Fail()
-	//}
-	//
-	//util.PrettyPrint(&job)
-	//
-	//db.Resolve().Delete(&job)
+func TestPerformAllJobs(t *testing.T) {
+	if err := PerformAllJobs(uint(1)); err != nil {
+		t.Fail()
+	}
 }

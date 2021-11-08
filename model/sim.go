@@ -165,24 +165,24 @@ func (t *Trade) percent() float64 {
 
 func (t *Trade) orderData() [][]interface{} {
 	return [][]interface{}{
-		{t.Buy.HistoricRate.Time.UnixMilli(), 1, t.in()},
-		{t.Sell.HistoricRate.Time.UnixMilli(), 0, t.out()},
+		{t.Buy.Time().UnixMilli(), 1, t.in()},
+		{t.Sell.Time().UnixMilli(), 0, t.out()},
 	}
 }
 
 func (t *Trade) splitData() [][]interface{} {
 	i := float64(t.Index%38) * 25.0 / 1000
 	return [][]interface{}{
-		{t.Buy.HistoricRate.Time.UnixMilli(), fmt.Sprintf("%d", t.Index), 0, "#757575", i},
-		{t.Sell.HistoricRate.Time.UnixMilli(), t.text(), 1, t.color(), i},
+		{t.Buy.Time().UnixMilli(), fmt.Sprintf("%d", t.Index), 0, "#757575", i},
+		{t.Sell.Time().UnixMilli(), t.text(), 1, t.color(), i},
 	}
 }
 
 func (t *Trade) summary() Summary {
 	return Summary{
 		TradeNumber: t.Index,
-		BuyTime:     t.Buy.HistoricRate.Time.UTC().Format(time.Stamp),
-		SellTime:    t.Sell.HistoricRate.Time.UTC().Format(time.Stamp),
+		BuyTime:     t.Buy.Time().UTC().Format(time.Stamp),
+		SellTime:    t.Sell.Time().UTC().Format(time.Stamp),
 		BuyPrice:    fmt.Sprintf("$%f", t.in()),
 		SellPrice:   fmt.Sprintf("$%f", t.out()),
 		Net:         fmt.Sprintf("$%.2f", t.net()),

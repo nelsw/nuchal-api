@@ -35,17 +35,26 @@ func init() {
 
 var (
 	userID    = uint(1)
-	productID = uint(1)
-	omega     = time.Now().Unix()
-	alpha     = time.Now().Add(time.Hour * 24 * 7 * -1).Unix()
+	productID = "1INCH-USD"
+	omega     = time.Now().UTC().Unix()
+	alpha     = time.Now().UTC().Add(time.Hour * 24 * 7 * -1).Unix()
 )
 
-func TestGetAllRatesBetween(t *testing.T) {
+func TestGetRates(t *testing.T) {
 
-	fmt.Println(time.Unix(1636082173, 0))
-	fmt.Println(time.Unix(1633403773, 0))
-
-	rates := GetAllRatesBetween(userID, productID, 1633403773, 1636082173)
+	rates, err := GetRates(userID, productID, alpha, omega)
+	if err != nil {
+		t.Fail()
+	}
 	util.PrettyPrint(rates)
+}
 
+func TestFindRates(t *testing.T) {
+
+	//fmt.Println(alpha)
+	//fmt.Println(omega)
+	//
+	//rates := FindRates(productID, alpha, omega)
+	//
+	//util.PrettyPrint(rates)
 }

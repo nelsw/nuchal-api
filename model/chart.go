@@ -26,7 +26,7 @@ type Settings struct {
 	LineWidth float64 `json:"line_width;omitempty"`
 }
 
-func NewProductChart(userID uint, productID uint, alpha, omega int64) (chart Chart, err error) {
+func NewProductChart(userID uint, productID string, alpha, omega int64) (chart Chart, err error) {
 
 	var rates []Rate
 	if rates, err = GetRates(userID, productID, alpha, omega); err != nil {
@@ -38,7 +38,7 @@ func NewProductChart(userID uint, productID uint, alpha, omega int64) (chart Cha
 		data = append(data, rate.data())
 	}
 
-	chart.Layer = Layer{candleLayer, findPID(productID), data, Settings{}}
+	chart.Layer = Layer{candleLayer, productID, data, Settings{}}
 	chart.Layers = []Layer{
 		{orderLayer, "Orders", [][]interface{}{}, Settings{Legend: false, ZIndex: 5}},
 		{splitterLayer, "Splits", [][]interface{}{}, Settings{Legend: false, ZIndex: 10}},

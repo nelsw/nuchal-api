@@ -10,8 +10,6 @@ func TestGetPatterns(t *testing.T) {
 
 	userID := uint(1)
 
-	InitProducts(userID)
-
 	//fmt.Println(len(ProductArr))
 
 	patterns := GetPatterns(userID)

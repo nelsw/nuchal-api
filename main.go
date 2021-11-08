@@ -37,9 +37,8 @@ func init() {
 		return strings.ToUpper(fmt.Sprintf("%s", i))
 	}
 
-	err := model.InitProducts(uint(1))
-	if err != nil {
-		log.Err(err).Str("key", "val").Send()
+	if err := model.PerformAllJobs(uint(1)); err != nil {
+		log.Err(err).Stack().Send()
 	}
 }
 
@@ -277,7 +276,7 @@ func getUserByID(c *gin.Context) {
 }
 
 func getProductArr(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, model.FindAllProducts(userID(c)))
+	c.IndentedJSON(http.StatusOK, model.FindAllProducts())
 }
 
 func getQuotes(c *gin.Context) {

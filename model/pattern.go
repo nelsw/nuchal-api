@@ -4,7 +4,6 @@ import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 	"math"
 	"nuchal-api/db"
 	"nuchal-api/util"
@@ -12,13 +11,15 @@ import (
 
 // Pattern defines the criteria for matching rates and placing orders.
 type Pattern struct {
-	gorm.Model
+
+	// UintModel
+	UintModel
 
 	// UserId
 	UserID uint `json:"user_id"`
 
 	// Currency is concatenation of two currencies. e.g. BTC-USD
-	ProductID uint `json:"product_id" gorm:"product_id"`
+	ProductID string `json:"product_id" gorm:"product_id"`
 
 	// Target is a percentage used to produce the goal sellOrder price from the entry buyOrder price.
 	Target float64 `json:"target"`
@@ -61,14 +62,14 @@ func (p Pattern) Logger() *zerolog.Logger {
 	logger := log.
 		With().
 		Uint("userID", p.UserID).
-		Uint("patternID", p.Model.ID).
+		Uint("patternID", p.ID).
 		Str("productID", p.Currency()).
 		Logger()
 	return &logger
 }
 
 func (p Pattern) Currency() string {
-	return p.Product.BaseCurrency + "-" + p.Product.QuoteCurrency
+	return p.Product.ID
 }
 
 func (p *Pattern) GoalPrice(price float64) float64 {
@@ -89,7 +90,7 @@ func (p *Pattern) MatchesTweezerBottomPattern(then, that, this Rate) bool {
 }
 
 func (p *Pattern) Save() {
-	if p.Model.ID > 0 {
+	if p.ID > 0 {
 		db.Resolve().Save(p)
 	} else {
 		db.Resolve().Create(p)
@@ -98,7 +99,7 @@ func (p *Pattern) Save() {
 
 func (p Pattern) Run(e *zerolog.Event, level zerolog.Level, msg string) {
 	e.Uint("userID", p.UserID).
-		Uint("patternID", p.Model.ID).
+		Uint("patternID", p.ID).
 		Str("productID", p.Currency())
 }
 
