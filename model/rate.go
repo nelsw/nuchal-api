@@ -80,7 +80,7 @@ func GetRates(userID uint, productID uint, alpha, omega int64) ([]Rate, error) {
 		from = time.Unix(alpha, 0)
 	}
 
-	pid := FindProductByID(productID).PID()
+	pid := findPID(productID)
 
 	out, err := GetHistoricRates(userID, pid, from, to)
 	if err != nil {

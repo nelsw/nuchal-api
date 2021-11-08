@@ -10,8 +10,8 @@ import (
 type OrderSide string
 
 const (
-	buySide  OrderSide = "buyOrder"
-	sellSide OrderSide = "sellOrder"
+	buySide  OrderSide = "buy"
+	sellSide           = "sell"
 )
 
 // CreateOrder creates an order on Coinbase and returns the order once it is no longer pending and has settled.

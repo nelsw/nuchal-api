@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -9,7 +8,6 @@ import (
 	"math"
 	"nuchal-api/db"
 	"nuchal-api/util"
-	"strings"
 )
 
 // Pattern defines the criteria for matching rates and placing orders.
@@ -155,28 +153,24 @@ func (p Pattern) NewMarketExitOrder() cb.Order {
 
 func (p Pattern) NewStopEntryOrder(size string, price float64) cb.Order {
 	return cb.Order{
-		Price:     p.precisePrice(price),
+		Price:     p.Product.precise(price),
 		ProductID: p.Currency(),
 		Side:      "sellOrder",
 		Size:      size,
 		Type:      "limit",
-		StopPrice: p.precisePrice(price),
+		StopPrice: p.Product.precise(price),
 		Stop:      "entry",
 	}
 }
 
 func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 	return cb.Order{
-		Price:     p.precisePrice(price),
+		Price:     p.Product.precise(price),
 		ProductID: p.Currency(),
 		Side:      "sellOrder",
 		Size:      size,
 		Type:      "limit",
-		StopPrice: p.precisePrice(price),
+		StopPrice: p.Product.precise(price),
 		Stop:      "loss",
 	}
-}
-
-func (p Pattern) precisePrice(price float64) string {
-	return fmt.Sprintf("%"+fmt.Sprintf(".%df", len(strings.Split(p.Product.QuoteIncrement, ".")[1])), price)
 }

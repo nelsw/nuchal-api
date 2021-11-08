@@ -40,10 +40,6 @@ func init() {
 	db.Migrate(&Product{})
 }
 
-func (p Product) PID() string {
-	return p.BaseCurrency + "-" + p.QuoteCurrency
-}
-
 func InitProducts(userID uint) error {
 
 	u := FindUserByID(userID)
@@ -99,36 +95,14 @@ func FindAllProducts(userID uint) []Product {
 	return products
 }
 
-func FindProductByProductID(productID string) Product {
-	var product Product
-	chunks := strings.Split(productID, "-")
-	db.Resolve().
-		Where("base_currency = ?", chunks[0]).
-		Where("quote_currency = ?", chunks[1]).
-		Find(&product)
-	return product
-}
-
-func FindProductByID(productID uint) Product {
-	var product Product
-	db.Resolve().
-		Where("id = ?", productID).
-		Find(&product)
-	return product
-}
-
-func FindPID(productID uint) string {
-	var product Product
-	db.Resolve().
-		Where("id = ?", productID).
-		Find(&product)
-	return product.BaseCurrency + "-" + product.QuoteCurrency
-}
-
 func findPID(productID uint) string {
 	var product Product
 	db.Resolve().
 		Where("id = ?", productID).
 		Find(&product)
 	return product.BaseCurrency + "-" + product.QuoteCurrency
+}
+
+func (p Product) precise(f float64) string {
+	return fmt.Sprintf("%"+fmt.Sprintf(".%df", len(strings.Split(p.QuoteIncrement, ".")[1])), f)
 }

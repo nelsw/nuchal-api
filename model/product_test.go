@@ -16,10 +16,3 @@ func TestInitProducts(t *testing.T) {
 
 	fmt.Println(util.Pretty(ProductArr))
 }
-
-func TestFindProductByProductID(t *testing.T) {
-
-	product := FindProductByProductID("ALGO-USD")
-	util.PrettyPrint(product)
-
-}

@@ -30,9 +30,6 @@ type Position struct {
 	Orders  []cb.Order `json:"orders,omitempty"`
 }
 
-type Posture struct {
-}
-
 func GetPortfolio(userID uint) (Portfolio, error) {
 
 	u := FindUserByID(userID)
