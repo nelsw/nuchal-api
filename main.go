@@ -72,7 +72,7 @@ func main() {
 	/*
 		product
 	*/
-	router.GET("/products/:userID", getProductArr)
+	router.GET("/products", getProductArr)
 
 	/*
 		quotes
@@ -121,26 +121,13 @@ func main() {
 
 func getProductChart(c *gin.Context) {
 
-	var err error
-	var userID, productID int
-
-	if productID, err = strconv.Atoi(c.Param("productID")); err != nil {
-		log.Err(err).Stack().Send()
-		c.Status(400)
-		return
-	}
-
-	if userID, err = strconv.Atoi(c.Param("productID")); err != nil {
-		log.Err(err).Stack().Send()
-		c.Status(400)
-		return
-	}
-
 	alpha := util.StringToInt64(c.Param("alpha"))
 	omega := util.StringToInt64(c.Param("omega"))
 
 	var chart model.Chart
-	if chart, err = model.NewProductChart(uint(userID), uint(productID), alpha, omega); err != nil {
+	var err error
+
+	if chart, err = model.NewProductChart(userID(c), c.Param("productID"), alpha, omega); err != nil {
 		c.Status(400)
 		return
 	}
@@ -280,7 +267,13 @@ func getProductArr(c *gin.Context) {
 }
 
 func getQuotes(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, model.GetQuotes(userID(c)))
+	quotes, err := model.GetQuotes()
+	if err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, quotes)
 }
 
 func userID(c *gin.Context) uint {
