@@ -19,8 +19,6 @@ func TestGetPatterns(t *testing.T) {
 	//	util.PrettyPrint(product)
 	//}
 
-	fmt.Println(patterns[0].Wat(2.01))
-
 	fmt.Println(util.Pretty(patterns))
 
 }

@@ -36,11 +36,11 @@ func NewTrade(patternID uint) {
 }
 
 func runTrades(patternID uint) {
-	go newTrade(patternID)
+	go tradeIt(patternID)
 	select {}
 }
 
-func newTrade(patternID uint) {
+func tradeIt(patternID uint) {
 
 	var err error
 	var buys int
@@ -76,12 +76,12 @@ func newTrade(patternID uint) {
 
 func buyBabyBuy(pattern Pattern) {
 
-	pattern.Logger().Info().Msg("buy")
+	pattern.Logger().Info().Msg("buyOrder")
 
 	order, err := CreateOrder(pattern, pattern.NewMarketEntryOrder())
 
 	if err != nil {
-		pattern.Logger().Error().Err(err).Msg("buy")
+		pattern.Logger().Error().Err(err).Msg("buyOrder")
 		return
 	}
 
@@ -96,7 +96,7 @@ func buyBabyBuy(pattern Pattern) {
 
 	for {
 		if err = sellBabySell(entry, order.Size, pattern); err == nil {
-			pattern.Logger().Error().Err(err).Msg("sell")
+			pattern.Logger().Error().Err(err).Msg("sellOrder")
 			break
 		}
 	}
@@ -112,7 +112,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 		Float64("goal", goal).
 		Float64("loss", loss).
 		Str("size", size).
-		Msg("sell")
+		Msg("sellOrder")
 
 	var order cb.Order
 	var err error
@@ -147,7 +147,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 		var price float64
 
 		if price, err = getPrice(wsConn, pattern.Currency()); err != nil {
-			pattern.Logger().Error().Err(err).Msg("error getting price during sell")
+			pattern.Logger().Error().Err(err).Msg("error getting price during sellOrder")
 
 			// can't get price info so create a stop entry order in case the price reaches our goal
 			if _, err = CreateOrder(pattern, pattern.NewStopEntryOrder(size, goal)); err != nil {
@@ -172,7 +172,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 		if order, err = CreateOrder(pattern, pattern.StopLossOrder(size, goal)); err != nil {
 			pattern.Logger().Error().Err(err).Float64("price", price).Float64("goal", goal).Msg("error while creating stop loss order")
 
-			// nvm, sell asap - hopefully the price is still higher than our goal
+			// nvm, sellOrder asap - hopefully the price is still higher than our goal
 
 			if order, err = CreateOrder(pattern, pattern.NewMarketExitOrder()); err != nil {
 				pattern.Logger().Error().Err(err).Float64("price", price).Float64("goal", goal).Msg("error while creating market exit order")
@@ -187,7 +187,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 				Float64("exit", util.StringToFloat64(order.ExecutedValue)/util.StringToFloat64(order.Size)).
 				Msg("price >= goal")
 
-			return nil // we sold at market price so no point in returning an error and triggering another sell
+			return nil // we sold at market price so no point in returning an error and triggering another sellOrder
 		}
 
 		for { // if we're here, we placed a stop loss order at our goal and now we try to find a better price
@@ -240,7 +240,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 						Str("productID", pattern.Currency()).
 						Msg("error while creating stop loss order")
 
-					// sell asap - we have no stops in place
+					// sellOrder asap - we have no stops in place
 					var order cb.Order
 					if order, err = CreateOrder(pattern, pattern.NewMarketExitOrder()); err != nil {
 						log.Error().
@@ -249,7 +249,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 							Str("productID", pattern.Currency()).
 							Float64("price", price).
 							Float64("goal", goal).
-							Msg("error while creating market exit order after failing to create stop loss order during sell")
+							Msg("error while creating market exit order after failing to create stop loss order during sellOrder")
 						return err // this is bad, and super rare ... we need to start over
 					}
 
@@ -260,7 +260,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 						Float64("exit", util.StringToFloat64(order.ExecutedValue)/util.StringToFloat64(order.Size)).
 						Msg("sold")
 
-					return nil // we have a nice stop loss in place, no need to try and sell this fill again
+					return nil // we have a nice stop loss in place, no need to try and sellOrder this fill again
 				}
 			}
 		} // else, onto the next rate and hopefully another higher price, woot!

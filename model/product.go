@@ -116,3 +116,19 @@ func FindProductByID(productID uint) Product {
 		Find(&product)
 	return product
 }
+
+func FindPID(productID uint) string {
+	var product Product
+	db.Resolve().
+		Where("id = ?", productID).
+		Find(&product)
+	return product.BaseCurrency + "-" + product.QuoteCurrency
+}
+
+func findPID(productID uint) string {
+	var product Product
+	db.Resolve().
+		Where("id = ?", productID).
+		Find(&product)
+	return product.BaseCurrency + "-" + product.QuoteCurrency
+}

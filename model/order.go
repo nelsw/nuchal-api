@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+type OrderSide string
+
+const (
+	buySide  OrderSide = "buyOrder"
+	sellSide OrderSide = "sellOrder"
+)
+
 // CreateOrder creates an order on Coinbase and returns the order once it is no longer pending and has settled.
 func CreateOrder(pattern Pattern, order cb.Order, attempt ...int) (cb.Order, error) {
 

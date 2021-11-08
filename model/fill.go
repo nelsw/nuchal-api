@@ -31,7 +31,7 @@ func GetRemainingBuyFills(userID uint, productID string, balance float64) ([]cb.
 	var buys []cb.Fill
 	var bal float64
 	for _, fill := range allFills {
-		if fill.Side == "buy" {
+		if fill.Side == "buyOrder" {
 			buys = append(buys, fill)
 			bal += util.StringToFloat64(fill.Size)
 			if bal == balance {

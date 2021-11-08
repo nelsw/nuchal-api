@@ -34,11 +34,6 @@ type Rate struct {
 	cb.HistoricRate `gorm:"embedded"`
 }
 
-type Data struct {
-	X int64     `json:"x"`
-	Y []float64 `json:"y"`
-}
-
 func init() {
 	db.Migrate(&Rate{})
 }
@@ -59,23 +54,12 @@ func (v *Rate) Time() time.Time {
 	return v.HistoricRate.Time
 }
 
-func (v *Rate) Data() Data {
-	return Data{v.Time().UTC().Unix(), []float64{v.Open, v.High, v.Low, v.Close}}
-}
-
-func (v *Rate) OHLCV() []interface{} {
+func (v *Rate) data() []interface{} {
 	return []interface{}{v.Time().UnixMilli(), v.Open, v.High, v.Low, v.Close, v.Volume}
 }
 
-func (v Rate) AveragePrice() float64 {
-	return (v.Open + v.High + v.Low + v.Close) / 4
-}
-
-func (v Rate) Stamp() string {
-	return v.Time().UTC().Format(time.Stamp)
-}
-
-func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate {
+// GetRates is the primary method for getting rates.
+func GetRates(userID uint, productID uint, alpha, omega int64) ([]Rate, error) {
 
 	var rates []Rate
 
@@ -100,8 +84,7 @@ func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate 
 
 	out, err := GetHistoricRates(userID, pid, from, to)
 	if err != nil {
-		log.Err(err).Send()
-		return rates
+		return nil, err
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
@@ -114,6 +97,11 @@ func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate 
 
 	db.Resolve().Create(&rates)
 
+	return rates, nil
+}
+
+func GetAllRatesBetween(userID uint, productID uint, alpha, omega int64) []Rate {
+	rates, _ := GetRates(userID, productID, alpha, omega)
 	return rates
 }
 

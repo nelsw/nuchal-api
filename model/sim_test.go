@@ -1,18 +1,16 @@
 package model
 
 import (
-	"fmt"
 	"nuchal-api/util"
 	"testing"
-	"time"
 )
 
-func TestNewProductSim(t *testing.T) {
+func TestNewSim(t *testing.T) {
 
-	fmt.Println(time.Unix(1636082173, 0))
-	fmt.Println(time.Unix(1633403773, 0))
+	sim, err := NewSim(uint(1), alpha, omega)
+	if err != nil {
+		t.Fail()
+	}
 
-	response := NewProductSim(uint(1), uint(1), 1633403773, 1636082173)
-	util.PrettyPrint(response)
-
+	util.PrettyPrint(sim)
 }

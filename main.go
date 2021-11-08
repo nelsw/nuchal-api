@@ -58,6 +58,7 @@ func CORS() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
 func main() {
 
 	router := gin.Default()
@@ -67,7 +68,6 @@ func main() {
 	/*
 		sim
 	*/
-	router.GET("/sim/product/:userID/:productID/:alpha/:omega", getProductSim)
 	router.GET("/sim/pattern/:patternID/:alpha/:omega", getPatternSim)
 
 	/*
@@ -112,7 +112,41 @@ func main() {
 	router.DELETE("/order/:userID/:orderID", deleteOrder)
 	router.POST("/order", postOrder)
 
+	/*
+		chart
+	*/
+	router.GET("/chart/product/:userID/:productID/:alpha/:omega", getProductChart)
+
 	router.Run("localhost:9080")
+}
+
+func getProductChart(c *gin.Context) {
+
+	var err error
+	var userID, productID int
+
+	if productID, err = strconv.Atoi(c.Param("productID")); err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(400)
+		return
+	}
+
+	if userID, err = strconv.Atoi(c.Param("productID")); err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(400)
+		return
+	}
+
+	alpha := util.StringToInt64(c.Param("alpha"))
+	omega := util.StringToInt64(c.Param("omega"))
+
+	var chart model.Chart
+	if chart, err = model.NewProductChart(uint(userID), uint(productID), alpha, omega); err != nil {
+		c.Status(400)
+		return
+	}
+
+	c.IndentedJSON(http.StatusOK, chart)
 }
 
 func postOrder(c *gin.Context) {
@@ -121,7 +155,8 @@ func postOrder(c *gin.Context) {
 
 func deleteOrder(c *gin.Context) {
 	if err := model.DeleteOrder(userID(c), c.Param("orderID")); err != nil {
-		c.Status(400)
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
 		return
 	}
 	c.Status(200)
@@ -130,8 +165,8 @@ func deleteOrder(c *gin.Context) {
 func getPattern(c *gin.Context) {
 	patternID, err := strconv.Atoi(c.Param("patternID"))
 	if err != nil {
-		log.Err(err).Send()
-		c.Status(400)
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
 		return
 	}
 	c.IndentedJSON(http.StatusOK, model.FindPattern(uint(patternID)))
@@ -140,8 +175,8 @@ func getPattern(c *gin.Context) {
 func startTrading(c *gin.Context) {
 	patternID, err := strconv.Atoi(c.Param("patternID"))
 	if err != nil {
-		log.Err(err).Send()
-		c.Status(400)
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
 		return
 	}
 	model.NewTrade(uint(patternID))
@@ -149,11 +184,10 @@ func startTrading(c *gin.Context) {
 }
 
 func getPortfolio(c *gin.Context) {
-	userID := userID(c)
-	portfolio, err := model.GetPortfolio(userID)
+	portfolio, err := model.GetPortfolio(userID(c))
 	if err != nil {
-		fmt.Println(err)
-		c.Status(500)
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
 		return
 	}
 	c.IndentedJSON(http.StatusOK, portfolio)
@@ -164,30 +198,30 @@ func getPatternSim(c *gin.Context) {
 	omega := util.StringToInt64(c.Param("omega"))
 	patternID, err := strconv.Atoi(c.Param("patternID"))
 	if err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
 	}
-	c.IndentedJSON(http.StatusOK, model.NewPatternSim(uint(patternID), alpha, omega))
-}
 
-func getProductSim(c *gin.Context) {
-	alpha := util.StringToInt64(c.Param("alpha"))
-	omega := util.StringToInt64(c.Param("omega"))
-	productID, err := strconv.Atoi(c.Param("productID"))
+	var sim model.Sim
+	sim, err = model.NewSim(uint(patternID), alpha, omega)
 	if err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
 	}
-	c.IndentedJSON(http.StatusOK, model.NewProductSim(userID(c), uint(productID), alpha, omega))
+
+	c.IndentedJSON(http.StatusOK, sim)
 }
 
 func deletePattern(c *gin.Context) {
-	patternID := c.Param("patternID")
-	intID, err := strconv.Atoi(patternID)
+	patternID, err := strconv.Atoi(c.Param("patternID"))
 	if err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
+		return
 	}
-	uintID := uint(intID)
-	model.DeletePattern(uintID)
+	model.DeletePattern(uint(patternID))
 	c.Status(http.StatusOK)
 }
 
@@ -198,12 +232,12 @@ func getPatterns(c *gin.Context) {
 func savePattern(c *gin.Context) {
 	data, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
 	}
 	var p model.Pattern
 	if err := json.Unmarshal(data, &p); err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
 	}
 	p.Save()
@@ -212,19 +246,22 @@ func savePattern(c *gin.Context) {
 
 func deleteUser(c *gin.Context) {
 	model.DeleteUser(userID(c))
+	c.Status(http.StatusOK)
 }
 
 func saveUser(c *gin.Context) {
 
 	data, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
 	var u model.User
 	if err := json.Unmarshal(data, &u); err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
@@ -250,7 +287,7 @@ func getQuotes(c *gin.Context) {
 func userID(c *gin.Context) uint {
 	userID, err := strconv.Atoi(c.Param("userID"))
 	if err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
 	}
 	return uint(userID)
 }

@@ -22,10 +22,10 @@ type Pattern struct {
 	// Currency is concatenation of two currencies. e.g. BTC-USD
 	ProductID uint `json:"product_id" gorm:"product_id"`
 
-	// Target is a percentage used to produce the goal sell price from the entry buy price.
+	// Target is a percentage used to produce the goal sellOrder price from the entry buyOrder price.
 	Target float64 `json:"target"`
 
-	// Tolerance is a percentage used to derive a limit sell price from the entry buy price.
+	// Tolerance is a percentage used to derive a limit sellOrder price from the entry buyOrder price.
 	Tolerance float64 `json:"tolerance"`
 
 	// Size is the amount of the transaction, using the ProductMap native quote increment.
@@ -53,6 +53,10 @@ type Pattern struct {
 
 func init() {
 	db.Migrate(&Pattern{})
+}
+
+func (p Pattern) user() User {
+	return FindUserByID(p.UserID)
 }
 
 func (p Pattern) Logger() *zerolog.Logger {
@@ -131,20 +135,10 @@ func FindPattern(id uint) Pattern {
 	return pattern
 }
 
-func GetPattern(userID uint, productID uint) Pattern {
-	var pattern Pattern
-	db.Resolve().
-		Preload("Product").
-		Where("user_id = ?", userID).
-		Where("product_id = ?", productID).
-		Find(&pattern)
-	return pattern
-}
-
 func (p Pattern) NewMarketEntryOrder() cb.Order {
 	return cb.Order{
 		ProductID: p.Currency(),
-		Side:      "buy",
+		Side:      "buyOrder",
 		Size:      util.FloatToDecimal(p.Size),
 		Type:      "market",
 	}
@@ -153,7 +147,7 @@ func (p Pattern) NewMarketEntryOrder() cb.Order {
 func (p Pattern) NewMarketExitOrder() cb.Order {
 	return cb.Order{
 		ProductID: p.Currency(),
-		Side:      "sell",
+		Side:      "sellOrder",
 		Size:      util.FloatToDecimal(p.Size),
 		Type:      "market",
 	}
@@ -163,7 +157,7 @@ func (p Pattern) NewStopEntryOrder(size string, price float64) cb.Order {
 	return cb.Order{
 		Price:     p.precisePrice(price),
 		ProductID: p.Currency(),
-		Side:      "sell",
+		Side:      "sellOrder",
 		Size:      size,
 		Type:      "limit",
 		StopPrice: p.precisePrice(price),
@@ -175,7 +169,7 @@ func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 	return cb.Order{
 		Price:     p.precisePrice(price),
 		ProductID: p.Currency(),
-		Side:      "sell",
+		Side:      "sellOrder",
 		Size:      size,
 		Type:      "limit",
 		StopPrice: p.precisePrice(price),
@@ -183,31 +177,6 @@ func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
 	}
 }
 
-//func FindPatterns(userID uint) []Pattern {
-//
-//	_ = InitProducts(userID)
-//
-//	var patterns []Pattern
-//	for _, p := range GetPatterns(userID) {
-//		pattern := Pattern{
-//			Product: ProductMap[strconv.Itoa(int(p.Currency))],
-//		}
-//		patterns = append(patterns, pattern)
-//	}
-//
-//	return patterns
-//}
-//
-//func FindPattern(userID uint, productID uint) Pattern {
-//	p := GetPattern(userID, productID)
-//	p.Product = ProductMap[strconv.Itoa(int(productID))]
-//	return p
-//}
-
 func (p Pattern) precisePrice(price float64) string {
 	return fmt.Sprintf("%"+fmt.Sprintf(".%df", len(strings.Split(p.Product.QuoteIncrement, ".")[1])), price)
-}
-
-func (p Pattern) Wat(price float64) string {
-	return p.precisePrice(price)
 }
