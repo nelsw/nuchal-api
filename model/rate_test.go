@@ -46,7 +46,8 @@ func TestGetRates(t *testing.T) {
 	if err != nil {
 		t.Fail()
 	}
-	util.PrettyPrint(rates)
+	r := rates[len(rates)-1]
+	util.PrettyPrint(r.Time())
 }
 
 func TestFindRates(t *testing.T) {

@@ -17,6 +17,7 @@ func getPrice(wsConn *ws.Conn, pid string) (float64, error) {
 		if err := wsConn.ReadJSON(&receivedMessage); err != nil {
 			log.Error().
 				Err(err).
+				Stack().
 				Str("pid", pid).
 				Msg("error reading from websocket")
 			return 0, err
@@ -30,6 +31,7 @@ func getPrice(wsConn *ws.Conn, pid string) (float64, error) {
 		err := errors.New(fmt.Sprintf("message type != ticker, %v", receivedMessage))
 		log.Error().
 			Err(err).
+			Stack().
 			Str("pid", pid).
 			Msg("error getting ticker message from websocket")
 		return 0, err

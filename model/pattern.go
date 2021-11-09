@@ -33,12 +33,8 @@ type Pattern struct {
 	// Delta is the size of an acceptable difference between tweezer bottom candlesticks.
 	Delta float64 `json:"delta"`
 
-	// Bind is represents the time of day when this strategy should activate.
-	// Gross of bind is the total amount of milliseconds totaling hour and minutes.
-	Bind int64 `json:"bind"`
-
 	// Bound is the context to which this strategy looks to achieve so that it can break.
-	// Values include buys, sells, holds, hours, minutes.
+	// Values include buys and holds.
 	Bound string `json:"bound"`
 
 	// Break is a numerical value which gets applied to the Bound.
@@ -52,13 +48,6 @@ type Pattern struct {
 	User *User `json:"-"`
 
 	Projection Projection `json:"projection" gorm:"-"`
-}
-
-type Projection struct {
-	Buy  float64 `json:"buy"`
-	Sell float64 `json:"sell"`
-	Fees float64 `json:"fees"`
-	ROI  float64 `json:"roi"`
 }
 
 func init() {
@@ -118,7 +107,7 @@ func FindPatternByID(patternID uint) Pattern {
 	return pattern
 }
 
-func GetPatterns(userID uint) *[]Pattern {
+func GetPatterns(userID uint) []Pattern {
 
 	var patterns []Pattern
 
@@ -131,66 +120,49 @@ func GetPatterns(userID uint) *[]Pattern {
 	var newPatterns []Pattern
 	for _, pattern := range patterns {
 		_ = pattern.Product.initPrice()
+
 		buy := pattern.Product.Price * pattern.Size
 		sell := (buy * pattern.Target) + buy
 		fees := (buy * pattern.User.Maker) + (sell * pattern.User.Taker)
-		pattern.Projection.Buy = util.StringToFloat64(pattern.Product.precise(buy))
-		pattern.Projection.Sell = util.StringToFloat64(pattern.Product.precise(sell))
-		pattern.Projection.Fees = util.StringToFloat64(pattern.Product.precise(fees))
-		pattern.Projection.ROI = util.StringToFloat64(pattern.Product.precise(sell - buy - fees))
+
+		projection := Projection{
+			Buy:  buy,
+			Sell: sell,
+			Fees: fees,
+		}
+
+		projection.setValues(pattern.Product.precise)
+
+		pattern.Projection = projection
+
 		newPatterns = append(newPatterns, pattern)
 	}
 
-	return &newPatterns
+	return newPatterns
 }
 
 func FindPattern(id uint) Pattern {
 	var pattern Pattern
 	db.Resolve().
 		Preload("Product").
+		Preload("User").
 		Where("id = ?", id).
 		Find(&pattern)
 	return pattern
 }
 
 func (p Pattern) NewMarketEntryOrder() cb.Order {
-	return cb.Order{
-		ProductID: p.Currency(),
-		Side:      "buyOrder",
-		Size:      util.FloatToDecimal(p.Size),
-		Type:      "market",
-	}
+	return p.Product.NewMarketEntryOrder(util.FloatToDecimal(p.Size))
 }
 
 func (p Pattern) NewMarketExitOrder() cb.Order {
-	return cb.Order{
-		ProductID: p.Currency(),
-		Side:      "sellOrder",
-		Size:      util.FloatToDecimal(p.Size),
-		Type:      "market",
-	}
+	return p.Product.NewMarketExitOrder(util.FloatToDecimal(p.Size))
 }
 
 func (p Pattern) NewStopEntryOrder(size string, price float64) cb.Order {
-	return cb.Order{
-		Price:     p.Product.precise(price),
-		ProductID: p.Currency(),
-		Side:      "sellOrder",
-		Size:      size,
-		Type:      "limit",
-		StopPrice: p.Product.precise(price),
-		Stop:      "entry",
-	}
+	return p.Product.NewStopEntryOrder(size, price)
 }
 
 func (p Pattern) StopLossOrder(size string, price float64) cb.Order {
-	return cb.Order{
-		Price:     p.Product.precise(price),
-		ProductID: p.Currency(),
-		Side:      "sellOrder",
-		Size:      size,
-		Type:      "limit",
-		StopPrice: p.Product.precise(price),
-		Stop:      "loss",
-	}
+	return p.Product.StopLossOrder(size, price)
 }

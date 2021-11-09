@@ -18,16 +18,13 @@ type Portfolio struct {
 }
 
 type Position struct {
-	ID      string     `json:"id"`
-	Balance float64    `json:"balance"`
-	Hold    float64    `json:"hold"`
-	Last    string     `json:"last"`
-	Mean    string     `json:"mean"`
-	Gross   string     `json:"gross"`
-	Net     string     `json:"net"`
-	Profit  string     `json:"profit"`
-	Fills   []cb.Fill  `json:"fills,omitempty"`
-	Orders  []cb.Order `json:"orders,omitempty"`
+	ID         string      `json:"id"`
+	Last       string      `json:"last"`
+	Balance    float64     `json:"balance"`
+	Hold       float64     `json:"hold"`
+	Projection Projection  `json:"projection"`
+	Fills      []BuyFill   `json:"fills,omitempty"`
+	Orders     []SellOrder `json:"orders,omitempty"`
 }
 
 func GetPortfolio(userID uint) (Portfolio, error) {
@@ -38,7 +35,7 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 	var err error
 
 	if accounts, err = u.Client().GetAccounts(); err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
 		return Portfolio{}, err
 	}
 
@@ -46,7 +43,6 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 
 	var positions []Position
 	for _, account := range accounts {
-
 		hold := util.StringToFloat64(account.Hold)
 		totalHold += hold
 
@@ -65,48 +61,52 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 
 		qty++
 
-		productID := account.Currency + "-USD"
-
-		var fills []cb.Fill
-		if fills, err = GetRemainingBuyFills(userID, productID, balance); err != nil {
-			log.Err(err).Send()
+		var product Product
+		if product, err = FindProductByID(account.Currency + "-USD"); err != nil {
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
-		var orders []cb.Order
-		if orders, err = GetOrders(userID, productID); err != nil {
-			log.Err(err).Send()
+		var fills []BuyFill
+		if fills, err = GetRemainingBuyFills(userID, product.ID, balance); err != nil {
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
-		var ticker cb.Ticker
-		if ticker, err = u.Client().GetTicker(productID); err != nil {
-			log.Err(err).Send()
+		var orders []SellOrder
+		if orders, err = GetOrders(userID, product); err != nil {
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
-		var sum float64
+		var sum, fee float64
 		for _, fill := range fills {
-			sum += util.StringToFloat64(fill.Price)
+			sum += fill.Price
+			fee += fill.Fee
 		}
 
-		gross := util.StringToFloat64(ticker.Price) * balance
-		crypto += gross
-		net := gross*u.Taker + gross
-		avg := sum / float64(len(fills))
+		exit := (product.Price * balance) - (product.Price * balance * u.Taker)
+		crypto += exit
 
-		positions = append(positions, Position{
-			productID,
-			balance,
-			hold,
-			util.StringToUsd(ticker.Price),
-			util.FloatToUsd(avg),
-			util.FloatToUsd(gross),
-			util.FloatToUsd(net),
-			util.FloatToUsd(net - gross),
-			fills,
-			orders,
-		})
+		projection := Projection{
+			Buy:  sum,
+			Sell: product.Price * float64(len(fills)),
+			Fees: fee,
+		}
+
+		projection.setValues(product.precise)
+
+		position := Position{
+			ID:         product.ID,
+			Last:       "$" + product.precise(product.Price),
+			Balance:    balance,
+			Hold:       hold,
+			Projection: projection,
+			Fills:      fills,
+			Orders:     orders,
+		}
+
+		positions = append(positions, position)
 	}
 
 	return Portfolio{

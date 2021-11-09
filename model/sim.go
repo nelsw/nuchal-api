@@ -15,6 +15,7 @@ type Sim struct {
 
 type Analysis struct {
 	Investment string    `json:"investment"`
+	Fees       string    `json:"fees"`
 	Return     string    `json:"return"`
 	Percent    string    `json:"percent"`
 	Summaries  []Summary `json:"summaries"`
@@ -78,6 +79,14 @@ func newTrade(index int, pattern Pattern) *Trade {
 
 func (t *Trade) in() float64 {
 	return t.Buy.Open
+}
+
+func (t *Trade) entry() float64 {
+	return t.in() + (t.in() * t.Pattern.User.Maker)
+}
+
+func (t *Trade) exit() float64 {
+	return t.out() + (t.out() * t.Pattern.User.Taker)
 }
 
 func (t *Trade) out() float64 {
@@ -159,11 +168,15 @@ func (t *Trade) loss() float64 {
 }
 
 func (t *Trade) even() float64 {
-	return t.in() + (t.in() * (t.Taker + t.Maker))
+	return t.entry() + t.exit()
 }
 
 func (t *Trade) investment() float64 {
-	return t.in() * t.Pattern.Size
+	return t.entry() * t.Pattern.Size
+}
+
+func (t *Trade) fees() float64 {
+	return (t.in() * t.Pattern.User.Maker) + (t.out() * t.Pattern.User.Taker)
 }
 
 func (t *Trade) net() float64 {
@@ -171,15 +184,15 @@ func (t *Trade) net() float64 {
 }
 
 func (t *Trade) gross() float64 {
-	return t.net() * t.Pattern.Size
+	return t.exit() - t.entry()
 }
 
 func (t *Trade) profit() float64 {
-	return t.gross() - (t.gross() * (t.Taker + t.Maker))
+	return (t.exit() - t.entry()) * t.Pattern.Size
 }
 
 func (t *Trade) percent() float64 {
-	return ((t.out() / t.in()) - 1) * 100
+	return t.profit() / t.investment() * 100
 }
 
 func (t *Trade) orderData() [][]interface{} {
@@ -228,7 +241,7 @@ func NewSim(patternID uint, alpha, omega int64) (sim Sim, err error) {
 	}
 
 	var summaries []Summary
-	var inv, roi float64
+	var inv, roi, fee float64
 	var then, that Rate
 
 	for i, this := range rates {
@@ -242,6 +255,7 @@ func NewSim(patternID uint, alpha, omega int64) (sim Sim, err error) {
 			index++
 			trade := newTrade(index, pattern)
 			trade.em(rates[i+1:])
+			fee += trade.fees()
 			roi += trade.profit()
 			inv += trade.investment()
 			orders = append(orders, trade.orderData()...)
@@ -263,6 +277,7 @@ func NewSim(patternID uint, alpha, omega int64) (sim Sim, err error) {
 	}
 	sim.Analysis = Analysis{
 		util.FloatToUsd(inv),
+		util.FloatToUsd(fee),
 		util.FloatToUsd(roi),
 		util.FloatToDecimal(roi / inv * 100),
 		summaries,

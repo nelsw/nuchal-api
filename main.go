@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"io/ioutil"
@@ -106,7 +107,7 @@ func main() {
 		order
 	*/
 	router.DELETE("/order/:userID/:orderID", deleteOrder)
-	router.POST("/order", postOrder)
+	router.POST("/order/:userID", postOrder)
 
 	/*
 		chart
@@ -132,10 +133,6 @@ func getProductChart(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, chart)
 }
 
-func postOrder(c *gin.Context) {
-
-}
-
 func deleteOrder(c *gin.Context) {
 	if err := model.DeleteOrder(userID(c), c.Param("orderID")); err != nil {
 		log.Err(err).Stack().Send()
@@ -143,6 +140,31 @@ func deleteOrder(c *gin.Context) {
 		return
 	}
 	c.Status(200)
+}
+
+func postOrder(c *gin.Context) {
+
+	data, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	var o cb.Order
+	if err = json.Unmarshal(data, &o); err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err = model.PostOrder(userID(c), o); err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	c.Status(http.StatusOK)
 }
 
 func getPattern(c *gin.Context) {

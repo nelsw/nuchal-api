@@ -26,20 +26,6 @@ func init() {
 	fmt.Println("init")
 }
 
-func (p *Product) initPrices(wsConn *ws.Conn) error {
-
-	if price, err := getPrice(wsConn, p.ID); err != nil {
-		log.Err(err).
-			Stack().
-			Str("p.ID", p.ID).
-			Msg("error getting price")
-		return err
-	} else {
-		p.Price = price
-		return nil
-	}
-}
-
 func (p *Product) initPrice() error {
 
 	var wsDialer ws.Dialer
@@ -67,6 +53,7 @@ func (p *Product) initPrice() error {
 	}); err != nil {
 		log.Error().
 			Err(err).
+			Stack().
 			Msg("error writing message to websocket")
 		return err
 	}
@@ -80,6 +67,48 @@ func (p *Product) initPrice() error {
 	} else {
 		p.Price = price
 		return nil
+	}
+}
+
+func (p *Product) NewMarketEntryOrder(size string) cb.Order {
+	return cb.Order{
+		ProductID: p.ID,
+		Side:      "buy",
+		Size:      size,
+		Type:      "market",
+	}
+}
+
+func (p *Product) NewMarketExitOrder(size string) cb.Order {
+	return cb.Order{
+		ProductID: p.ID,
+		Side:      "sell",
+		Size:      size,
+		Type:      "market",
+	}
+}
+
+func (p *Product) NewStopEntryOrder(size string, price float64) cb.Order {
+	return cb.Order{
+		ProductID: p.ID,
+		Price:     p.precise(price),
+		Side:      "sell",
+		Size:      size,
+		Type:      "limit",
+		StopPrice: p.precise(price),
+		Stop:      "entry",
+	}
+}
+
+func (p *Product) StopLossOrder(size string, price float64) cb.Order {
+	return cb.Order{
+		ProductID: p.ID,
+		Price:     p.precise(price),
+		Side:      "sell",
+		Size:      size,
+		Type:      "limit",
+		StopPrice: p.precise(price),
+		Stop:      "loss",
 	}
 }
 

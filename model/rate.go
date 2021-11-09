@@ -25,7 +25,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"nuchal-api/db"
-	"sort"
 	"time"
 )
 
@@ -110,25 +109,13 @@ func FindRates(productID string, alpha, omega int64) []Rate {
 // GetRates is the primary method for getting rates.
 func GetRates(userID uint, productID string, alpha, omega int64) ([]Rate, error) {
 
-	var rates []Rate
+	rates := FindRates(productID, alpha, omega)
 
-	from := time.Unix(alpha, 0).UTC()
-	to := time.Unix(omega, 0).UTC()
+	from := time.Unix(alpha, 0)
+	to := time.Unix(omega, 0)
 
-	fmt.Println(from)
-
-	db.Resolve().
-		Where("product_id = ?", productID).
-		Where("unix_second BETWEEN ? AND ?", from, to).
-		Order("unix_second asc").
-		Find(&rates)
-
-	size := len(rates)
-
-	if size > 0 {
-		from = rates[size-1].Time()
-	} else {
-		from = time.Unix(alpha, 0)
+	if len(rates) > 0 {
+		from = rates[len(rates)-1].Time().UTC()
 	}
 
 	out, err := GetHistoricRates(userID, productID, from, to)
@@ -136,17 +123,13 @@ func GetRates(userID uint, productID string, alpha, omega int64) ([]Rate, error)
 		return nil, err
 	}
 
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].Time.Before(out[j].Time)
-	})
-
-	var newRates []Rate
-
 	for _, rate := range out {
-		newRates = append(newRates, NewRate(productID, rate))
+		newRate := NewRate(productID, rate)
+		tx := db.Resolve().Create(&newRate)
+		if tx.Error != nil {
+			db.Resolve().Save(&newRate)
+		}
 	}
-
-	db.Resolve().Create(&newRates)
 
 	return FindRates(productID, alpha, omega), nil
 }
@@ -179,9 +162,11 @@ func rateParams(alpha, omega time.Time) []cb.GetHistoricRatesParams {
 	var results []cb.GetHistoricRatesParams
 
 	for i := 0.0; i < 24; i += 4 {
+		fmt.Println(start)
+		fmt.Println(end)
 		results = append(results, cb.GetHistoricRatesParams{start, end, 60})
 		start = end
-		end = end.Add(time.Hour * 4)
+		end = start.Add(time.Hour * 4)
 		if start.After(omega) {
 			break
 		}
