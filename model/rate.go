@@ -19,6 +19,7 @@
 package model
 
 import (
+	"fmt"
 	ws "github.com/gorilla/websocket"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
@@ -92,6 +93,7 @@ func FindRates(productID string, alpha, omega int64) []Rate {
 	db.Resolve().
 		Preload("Product").
 		Where("product_id = ?", productID).
+		Where("unix_second BETWEEN ? AND ?", alpha, omega).
 		Order("unix_second asc").
 		Find(&rates)
 
@@ -110,8 +112,10 @@ func GetRates(userID uint, productID string, alpha, omega int64) ([]Rate, error)
 
 	var rates []Rate
 
-	from := time.Unix(alpha, 0)
-	to := time.Unix(omega, 0)
+	from := time.Unix(alpha, 0).UTC()
+	to := time.Unix(omega, 0).UTC()
+
+	fmt.Println(from)
 
 	db.Resolve().
 		Where("product_id = ?", productID).

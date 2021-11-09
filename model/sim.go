@@ -30,6 +30,8 @@ type Summary struct {
 	Gross       string `json:"gross"`
 	Profit      string `json:"profit"`
 	Percent     string `json:"percent"`
+	Color       string `json:"color"`
+	Emoji       string `json:"emoji"`
 }
 
 type TradeType string
@@ -69,9 +71,8 @@ func newTrade(index int, pattern Pattern) *Trade {
 	trade := new(Trade)
 	trade.Index = index
 	trade.Pattern = pattern
-	user := pattern.user()
-	trade.Maker = user.Maker
-	trade.Taker = user.Taker
+	trade.Maker = pattern.User.Maker
+	trade.Taker = pattern.User.Taker
 	return trade
 }
 
@@ -131,6 +132,24 @@ func (t *Trade) text() string {
 	}
 }
 
+func (t *Trade) emoji() string {
+	if t.Type == lossType {
+		return `💩`
+	} else if t.Type == evenType {
+		return `👍🏻`
+	} else if t.Type == goalType {
+		return `🎯`
+	} else if t.Type == humpType {
+		return `🔥`
+	} else if t.Type == downType {
+		return `📉`
+	} else if t.Type == upType {
+		return `📈`
+	} else {
+		return ``
+	}
+}
+
 func (t *Trade) goal() float64 {
 	return t.Pattern.GoalPrice(t.in())
 }
@@ -165,8 +184,8 @@ func (t *Trade) percent() float64 {
 
 func (t *Trade) orderData() [][]interface{} {
 	return [][]interface{}{
-		{t.Buy.Time().UnixMilli(), 1, t.in()},
-		{t.Sell.Time().UnixMilli(), 0, t.out()},
+		{t.Buy.Time().UnixMilli(), 1, t.Pattern.Product.precise(t.in())},
+		{t.Sell.Time().UnixMilli(), 0, t.Pattern.Product.precise(t.out())},
 	}
 }
 
@@ -183,12 +202,14 @@ func (t *Trade) summary() Summary {
 		TradeNumber: t.Index,
 		BuyTime:     t.Buy.Time().UTC().Format(time.Stamp),
 		SellTime:    t.Sell.Time().UTC().Format(time.Stamp),
-		BuyPrice:    fmt.Sprintf("$%f", t.in()),
-		SellPrice:   fmt.Sprintf("$%f", t.out()),
-		Net:         fmt.Sprintf("$%.2f", t.net()),
-		Gross:       fmt.Sprintf("$%.2f", t.gross()),
-		Profit:      fmt.Sprintf("$%.2f", t.profit()),
+		BuyPrice:    t.Pattern.Product.precise(t.in()),
+		SellPrice:   t.Pattern.Product.precise(t.out()),
+		Net:         t.Pattern.Product.precise(t.net()),
+		Gross:       t.Pattern.Product.precise(t.gross()),
+		Profit:      t.Pattern.Product.precise(t.profit()),
 		Percent:     fmt.Sprintf("%.2f", t.percent()) + "%",
+		Color:       t.color(),
+		Emoji:       t.emoji(),
 	}
 }
 

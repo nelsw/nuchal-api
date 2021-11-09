@@ -47,15 +47,22 @@ type Pattern struct {
 	// Enable is a flag that allows the system to bind, get bound, and break.
 	Enable bool `json:"enable"`
 
-	Product Product `json:"product"`
+	Product *Product `json:"product"`
+
+	User *User `json:"-"`
+
+	Projection Projection `json:"projection" gorm:"-"`
+}
+
+type Projection struct {
+	Buy  float64 `json:"buy"`
+	Sell float64 `json:"sell"`
+	Fees float64 `json:"fees"`
+	ROI  float64 `json:"roi"`
 }
 
 func init() {
 	db.Migrate(&Pattern{})
-}
-
-func (p Pattern) user() User {
-	return FindUserByID(p.UserID)
 }
 
 func (p Pattern) Logger() *zerolog.Logger {
@@ -97,12 +104,6 @@ func (p *Pattern) Save() {
 	}
 }
 
-func (p Pattern) Run(e *zerolog.Event, level zerolog.Level, msg string) {
-	e.Uint("userID", p.UserID).
-		Uint("patternID", p.ID).
-		Str("productID", p.Currency())
-}
-
 func DeletePattern(patternID uint) {
 	db.Resolve().Delete(&Pattern{}, patternID)
 }
@@ -111,18 +112,36 @@ func FindPatternByID(patternID uint) Pattern {
 	var pattern Pattern
 	db.Resolve().
 		Preload("Product").
+		Preload("User").
 		Where("id = ?", patternID).
 		Find(&pattern)
 	return pattern
 }
 
-func GetPatterns(userID uint) []Pattern {
+func GetPatterns(userID uint) *[]Pattern {
+
 	var patterns []Pattern
+
 	db.Resolve().
 		Preload("Product").
+		Preload("User").
 		Where("user_id = ?", userID).
 		Find(&patterns)
-	return patterns
+
+	var newPatterns []Pattern
+	for _, pattern := range patterns {
+		_ = pattern.Product.initPrice()
+		buy := pattern.Product.Price * pattern.Size
+		sell := (buy * pattern.Target) + buy
+		fees := (buy * pattern.User.Maker) + (sell * pattern.User.Taker)
+		pattern.Projection.Buy = util.StringToFloat64(pattern.Product.precise(buy))
+		pattern.Projection.Sell = util.StringToFloat64(pattern.Product.precise(sell))
+		pattern.Projection.Fees = util.StringToFloat64(pattern.Product.precise(fees))
+		pattern.Projection.ROI = util.StringToFloat64(pattern.Product.precise(sell - buy - fees))
+		newPatterns = append(newPatterns, pattern)
+	}
+
+	return &newPatterns
 }
 
 func FindPattern(id uint) Pattern {

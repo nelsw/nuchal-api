@@ -20,7 +20,7 @@ func init() {
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.TraceLevel)
 
 	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
 
@@ -72,12 +72,9 @@ func main() {
 	/*
 		product
 	*/
-	router.GET("/products", getProductArr)
-
-	/*
-		quotes
-	*/
-	router.GET("/quotes/:userID", getQuotes)
+	router.GET("/product/:id", findProductByID)
+	router.GET("/products", getAllProducts)
+	router.GET("/products/:quote", getAllProductsByQuote)
 
 	/*
 		portfolio
@@ -262,18 +259,38 @@ func getUserByID(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, user(c))
 }
 
-func getProductArr(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, model.FindAllProducts())
-}
+/*
+	products
+*/
 
-func getQuotes(c *gin.Context) {
-	quotes, err := model.GetQuotes()
+func findProductByID(c *gin.Context) {
+	p, err := model.FindProductByID(c.Param("id"))
 	if err != nil {
 		log.Err(err).Stack().Send()
-		c.Status(http.StatusBadRequest)
+		c.Status(http.StatusInternalServerError)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, quotes)
+	c.IndentedJSON(http.StatusOK, p)
+}
+
+func getAllProducts(c *gin.Context) {
+	p, err := model.FindAllProducts()
+	if err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, p)
+}
+
+func getAllProductsByQuote(c *gin.Context) {
+	p, err := model.FindAllProductsByQuote(c.Param("quote"))
+	if err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, p)
 }
 
 func userID(c *gin.Context) uint {

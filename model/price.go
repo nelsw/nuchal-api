@@ -9,41 +9,6 @@ import (
 	"nuchal-api/util"
 )
 
-func GetPrice(pid string) (float64, error) {
-
-	var wsDialer ws.Dialer
-	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Str("pid", pid).
-			Msg("error while opening websocket connection")
-		return 0, err
-	}
-
-	defer func(wsConn *ws.Conn) {
-		if err := wsConn.Close(); err != nil {
-			log.Error().
-				Err(err).
-				Str("pid", pid).
-				Msg("error closing websocket connection")
-		}
-	}(wsConn)
-
-	if err := wsConn.WriteJSON(&cb.Message{
-		Type:     "subscribe",
-		Channels: []cb.MessageChannel{{"ticker", []string{pid}}},
-	}); err != nil {
-		log.Error().
-			Err(err).
-			Str("pid", pid).
-			Msg("error writing message to websocket")
-		return 0, err
-	}
-
-	return getPrice(wsConn, pid)
-}
-
 // getPrice gets the latest ticker price for the given productId.
 func getPrice(wsConn *ws.Conn, pid string) (float64, error) {
 
