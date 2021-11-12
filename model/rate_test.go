@@ -50,6 +50,19 @@ func TestGetRates(t *testing.T) {
 	util.PrettyPrint(r.Time())
 }
 
+func TestGetLastRate(t *testing.T) {
+	var todayRate Rate
+
+	FindFirstRateByProductIDInTimeDescOrder(productID, &todayRate)
+	util.PrettyPrint(todayRate)
+
+	before := time.Unix(todayRate.UnixSecond, 0).Add(time.Hour * -24).UTC().Unix()
+
+	var yesterdayRate Rate
+	FindFirstRateByProductIDAndLessThanTimeInTimeDescOrder(productID, before, &yesterdayRate)
+	util.PrettyPrint(yesterdayRate)
+}
+
 func TestFindRates(t *testing.T) {
 
 	//fmt.Println(alpha)

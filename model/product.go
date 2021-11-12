@@ -2,72 +2,127 @@ package model
 
 import (
 	"fmt"
-	ws "github.com/gorilla/websocket"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
-	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
+	"math"
 	"nuchal-api/db"
 	"nuchal-api/util"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Product struct {
 	StrModel
-	Name  string  `json:"name"`
-	Base  string  `json:"base"`
-	Quote string  `json:"quote"`
-	Min   float64 `json:"min"`
-	Max   float64 `json:"max"`
-	Step  float64 `json:"step"`
-	Price float64 `json:"price" gorm:"-"`
+	Name    string  `json:"name"`
+	Base    string  `json:"base"`
+	Quote   string  `json:"quote"`
+	Min     float64 `json:"min"`
+	Max     float64 `json:"max"`
+	Step    float64 `json:"step"`
+	Posture Posture `json:"posture,omitempty" gorm:"-"`
+}
+
+type Posture struct {
+	Symbol           string    `json:"symbol"`
+	Prices           []float64 `json:"prices"`
+	Price            float64   `json:"price"`
+	PriceText        string    `json:"price_text"`
+	Price24h         float64   `json:"price_24h"`
+	Price24hText     string    `json:"price_24h_text"`
+	Price24hLow      float64   `json:"price_24h_low"`
+	Price24hLowText  string    `json:"price_24h_low_text"`
+	Price24hHigh     float64   `json:"price_24h_high"`
+	Price24hHighText string    `json:"price_24h_high_text"`
+	Change           float64   `json:"change"`
+	ChangeText       string    `json:"change_text"`
+	Percent          float64   `json:"percent"`
+	PercentText      string    `json:"percent_text"`
+	Volume24h        float64   `json:"volume_24h"`
+	Volume24hText    string    `json:"volume_24h_text"`
 }
 
 func init() {
 	db.Migrate(&Product{})
-	fmt.Println("init")
 }
 
-func (p *Product) initPrice() error {
+func (p *Product) AfterFind(tx *gorm.DB) (err error) {
 
-	var wsDialer ws.Dialer
-	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Stack().
-			Msg("error while opening websocket connection")
-		return err
-	}
+	var omegaRate Rate
 
-	defer func(wsConn *ws.Conn) {
-		if err := wsConn.Close(); err != nil {
-			log.Error().
-				Err(err).
-				Stack().
-				Msg("error closing websocket connection")
+	tx.Where("product_id = ?", p.ID).
+		Order("unix_second desc").
+		First(&omegaRate)
+
+	omegaTime := omegaRate.Time().UTC()
+	alphaTime := omegaTime.Add(time.Hour * -24).UTC()
+
+	var rates []Rate
+	tx.Where("product_id = ?", p.ID).
+		Where("unix_second between ? and ?", alphaTime.Unix(), omegaTime.Unix()).
+		Find(&rates)
+
+	if len(rates) < 1 {
+		p.Posture = Posture{
+			Price:     omegaRate.Close,
+			PriceText: "$" + p.precise(omegaRate.Close),
 		}
-	}(wsConn)
-
-	if err := wsConn.WriteJSON(&cb.Message{
-		Type:     "subscribe",
-		Channels: []cb.MessageChannel{{"ticker", []string{p.ID}}},
-	}); err != nil {
-		log.Error().
-			Err(err).
-			Stack().
-			Msg("error writing message to websocket")
-		return err
-	}
-
-	if price, err := getPrice(wsConn, p.ID); err != nil {
-		log.Err(err).
-			Stack().
-			Str("p.ID", p.ID).
-			Msg("error getting price")
-		return err
-	} else {
-		p.Price = price
 		return nil
 	}
+
+	alphaRate := rates[0]
+
+	min := math.Min(omegaRate.Close, alphaRate.Close)
+	max := math.Max(omegaRate.Close, alphaRate.Close)
+
+	var percent float64
+	if percent = (max - min) / omegaRate.Close * 100; math.IsNaN(percent) {
+		percent = 0
+	}
+
+	var change float64
+	if change = max - min; math.IsNaN(change) {
+		change = 0
+	}
+
+	symbol := "-"
+	if omegaRate.Close > alphaRate.Close {
+		symbol = "+"
+	}
+
+	var prices []float64
+	var high, low, volume float64
+	for _, rate := range rates {
+		volume += rate.Volume
+		if rate.High > high || high == 0 {
+			high = rate.High
+		}
+		if rate.Low < low || low == 0 {
+			low = rate.Low
+		}
+		prices = append(prices, rate.avg())
+	}
+
+	p.Posture = Posture{
+		Price:            omegaRate.Close,
+		PriceText:        "$" + p.precise(omegaRate.Close),
+		Price24hHigh:     high,
+		Price24hHighText: "$" + p.precise(high),
+		Price24hLow:      low,
+		Price24hLowText:  "$" + p.precise(low),
+		Price24h:         alphaRate.Close,
+		Price24hText:     "$" + p.precise(alphaRate.Close),
+		Change:           change,
+		ChangeText:       "$" + p.precise(change),
+		Percent:          percent,
+		PercentText:      fmt.Sprintf("%.2f", percent) + "%",
+		Volume24h:        volume,
+		Volume24hText:    strconv.Itoa(int(volume)),
+		Prices:           prices,
+		Symbol:           symbol,
+	}
+
+	return nil
 }
 
 func (p *Product) NewMarketEntryOrder(size string) cb.Order {
@@ -120,12 +175,7 @@ func FindProductByID(ID string) (Product, error) {
 		Where("id = ?", ID).
 		Find(&product)
 
-	err := product.initPrice()
-	if err != nil {
-		log.Err(err).Stack().Send()
-	}
-
-	return product, err
+	return product, nil
 }
 
 func FindAllProducts() ([]Product, error) {
@@ -136,55 +186,7 @@ func FindAllProducts() ([]Product, error) {
 		Order("id asc").
 		Find(&products)
 
-	var wsDialer ws.Dialer
-	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Stack().
-			Msg("error while opening websocket connection")
-		return nil, err
-	}
-
-	defer func(wsConn *ws.Conn) {
-		if err := wsConn.Close(); err != nil {
-			log.Error().
-				Err(err).
-				Stack().
-				Msg("error closing websocket connection")
-		}
-	}(wsConn)
-
-	var productIDs []string
-	for _, product := range products {
-		productIDs = append(productIDs, product.ID)
-	}
-
-	if err := wsConn.WriteJSON(&cb.Message{
-		Type:     "subscribe",
-		Channels: []cb.MessageChannel{{"ticker", productIDs}},
-	}); err != nil {
-		log.Error().
-			Err(err).
-			Msg("error writing message to websocket")
-		return nil, err
-	}
-
-	var newProducts []Product
-	for _, product := range products {
-		price, err := getPrice(wsConn, product.ID)
-		if err != nil {
-			log.Err(err).
-				Stack().
-				Str("product.ID", product.ID).
-				Msg("error getting price")
-			continue
-		}
-		product.Price = price
-		newProducts = append(newProducts, product)
-	}
-
-	return newProducts, nil
+	return products, nil
 }
 
 func FindAllProductsByQuote(quote string) ([]Product, error) {
@@ -196,61 +198,24 @@ func FindAllProductsByQuote(quote string) ([]Product, error) {
 		Order("id asc").
 		Find(&products)
 
-	var wsDialer ws.Dialer
-	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Stack().
-			Msg("error while opening websocket connection")
-		return nil, err
-	}
-
-	defer func(wsConn *ws.Conn) {
-		if err := wsConn.Close(); err != nil {
-			log.Error().
-				Err(err).
-				Stack().
-				Msg("error closing websocket connection")
-		}
-	}(wsConn)
-
-	var productIDs []string
-	for _, product := range products {
-		productIDs = append(productIDs, product.ID)
-	}
-
-	if err := wsConn.WriteJSON(&cb.Message{
-		Type:     "subscribe",
-		Channels: []cb.MessageChannel{{"ticker", productIDs}},
-	}); err != nil {
-		log.Error().
-			Err(err).
-			Msg("error writing message to websocket")
-		return nil, err
-	}
-
-	var newProducts []Product
-	for _, product := range products {
-		price, err := getPrice(wsConn, product.ID)
-		if err != nil {
-			log.Err(err).
-				Stack().
-				Str("product.ID", product.ID).
-				Msg("error getting price")
-			continue
-		}
-		product.Price = price
-		newProducts = append(newProducts, product)
-	}
-
-	return newProducts, nil
+	return products, nil
 }
 
-func (p Product) precise(f float64) string {
+func (p *Product) precise(f float64) string {
+
 	decimal := util.FloatToDecimal(p.Step)
-	zeros := len(strings.Split(decimal, ".")[1])
-	zeroFormat := fmt.Sprintf(".%df", zeros)
-	preciseFormat := "%" + zeroFormat
-	return fmt.Sprintf(preciseFormat, f)
+	sides := strings.Split(decimal, ".")
+
+	if len(sides) > 1 {
+		zeros := len(sides[1])
+		zeroFormat := fmt.Sprintf(".%df", zeros)
+		preciseFormat := "%" + zeroFormat
+		result := fmt.Sprintf(preciseFormat, f)
+		if result == "NaN" {
+			return "0.0"
+		}
+		return result
+	}
+
+	return sides[0]
 }

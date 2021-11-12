@@ -119,12 +119,10 @@ func GetPatterns(userID uint) []Pattern {
 
 	var newPatterns []Pattern
 	for _, pattern := range patterns {
-		_ = pattern.Product.initPrice()
 
-		buy := pattern.Product.Price * pattern.Size
+		buy := pattern.Product.Posture.Price * pattern.Size
 		sell := (buy * pattern.Target) + buy
 		fees := (buy * pattern.User.Maker) + (sell * pattern.User.Taker)
-
 		projection := Projection{
 			Buy:  buy,
 			Sell: sell,

@@ -19,7 +19,6 @@
 package model
 
 import (
-	"fmt"
 	ws "github.com/gorilla/websocket"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
@@ -29,8 +28,8 @@ import (
 )
 
 type Rate struct {
-	ProductID  string `json:"product_id" gorm:"primarykey"`
 	UnixSecond int64  `json:"unix_second" gorm:"primarykey"`
+	ProductID  string `json:"product_id" gorm:"primarykey"`
 
 	CreatedAt int64          `json:"created_at" gorm:"autoCreateTime:nano"`
 	UpdatedAt int64          `json:"updated_at" gorm:"autoUpdateTime:nano"`
@@ -72,12 +71,33 @@ func (v *Rate) IsInit() bool {
 	return v != nil && v != (&Rate{})
 }
 
+func (v *Rate) avg() float64 {
+	return (v.Open + v.High + v.Low + v.Close) / 4
+}
+
 func (v *Rate) Time() time.Time {
 	return time.Unix(v.UnixSecond, 0)
 }
 
 func (v *Rate) data() []interface{} {
 	return []interface{}{v.Time().UnixMilli(), v.Open, v.High, v.Low, v.Close, v.Volume}
+}
+
+func FindFirstRateByProductIDInTimeDescOrder(productID string, r *Rate) {
+	db.Resolve().
+		Preload("Product").
+		Where("product_id = ?", productID).
+		Order("unix_second desc").
+		First(r)
+}
+
+func FindFirstRateByProductIDAndLessThanTimeInTimeDescOrder(productID string, before int64, r *Rate) {
+	db.Resolve().
+		Preload("Product").
+		Where("product_id = ?", productID).
+		Where("unix_second < ?", before).
+		Order("unix_second desc").
+		First(r)
 }
 
 func FindRates(productID string, alpha, omega int64) []Rate {
@@ -162,8 +182,6 @@ func rateParams(alpha, omega time.Time) []cb.GetHistoricRatesParams {
 	var results []cb.GetHistoricRatesParams
 
 	for i := 0.0; i < 24; i += 4 {
-		fmt.Println(start)
-		fmt.Println(end)
 		results = append(results, cb.GetHistoricRatesParams{start, end, 60})
 		start = end
 		end = start.Add(time.Hour * 4)

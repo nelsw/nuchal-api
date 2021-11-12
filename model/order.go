@@ -95,12 +95,6 @@ func GetOrder(pattern Pattern, orderID string, attempt ...int) (cb.Order, error)
 }
 
 // CancelOrder is a recursive function that cancels an order equal to the given id.
-func CancelOrderByID(userID uint, orderID string) error {
-	u := FindUserByID(userID)
-	return u.Client().CancelOrder(orderID)
-}
-
-// CancelOrder is a recursive function that cancels an order equal to the given id.
 func CancelOrder(pattern Pattern, orderID string, attempt ...int) error {
 
 	u := FindUserByID(pattern.UserID)

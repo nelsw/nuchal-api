@@ -13,6 +13,7 @@ type JobType string
 
 const (
 	InitAllCBProducts JobType = "init all cb products"
+	InitOneDayOfRates         = "init one day of rates"
 )
 
 type Job struct {
@@ -27,6 +28,15 @@ func init() {
 	db.Migrate(&Job{})
 }
 
+func CheckJobs(userID uint) {
+	go func() {
+		if err := PerformAllJobs(userID); err != nil {
+			log.Error().Err(err).Stack().Send()
+		}
+	}()
+	select {}
+}
+
 func PerformAllJobs(userID uint) error {
 
 	productJob := &Job{
@@ -37,7 +47,19 @@ func PerformAllJobs(userID uint) error {
 	}
 
 	if err := productJob.Perform(); err != nil {
-		log.Err(err).Stack().Send()
+		log.Error().Err(err).Stack().Send()
+		return err
+	}
+
+	ratesJob := &Job{
+		Model:   gorm.Model{},
+		UserID:  userID,
+		JobType: InitOneDayOfRates,
+		Alpha:   time.Now(),
+	}
+
+	if err := ratesJob.Perform(); err != nil {
+		log.Error().Err(err).Stack().Send()
 		return err
 	}
 
@@ -48,8 +70,25 @@ func (j *Job) Perform() error {
 	switch j.JobType {
 	case InitAllCBProducts:
 		return j.initAllCBProducts()
+	case InitOneDayOfRates:
+		return j.initOneDayOfRates()
 	}
 	return nil
+}
+
+func (j *Job) initOneDayOfRates() error {
+	if products, err := FindAllProducts(); err != nil {
+		return err
+	} else {
+		for _, product := range products {
+			omega := time.Now()
+			alpha := omega.Add(time.Hour * -24)
+			if _, err := GetRates(j.UserID, product.ID, alpha.Unix(), omega.Unix()); err != nil {
+				log.Error().Err(err).Stack().Send()
+			}
+		}
+		return nil
+	}
 }
 
 func (j *Job) initAllCBProducts() error {

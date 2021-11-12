@@ -38,9 +38,7 @@ func init() {
 		return strings.ToUpper(fmt.Sprintf("%s", i))
 	}
 
-	if err := model.PerformAllJobs(uint(1)); err != nil {
-		log.Err(err).Stack().Send()
-	}
+	//go model.CheckJobs(uint(1))
 }
 
 func CORS() gin.HandlerFunc {
@@ -180,7 +178,7 @@ func getPattern(c *gin.Context) {
 func startTrading(c *gin.Context) {
 	patternID, err := strconv.Atoi(c.Param("patternID"))
 	if err != nil {
-		log.Err(err).Stack().Send()
+		log.Error().Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -191,7 +189,7 @@ func startTrading(c *gin.Context) {
 func getPortfolio(c *gin.Context) {
 	portfolio, err := model.GetPortfolio(userID(c))
 	if err != nil {
-		log.Err(err).Stack().Send()
+		log.Error().Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -302,13 +300,13 @@ func getAllProducts(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, p)
+	c.JSON(http.StatusOK, p)
 }
 
 func getAllProductsByQuote(c *gin.Context) {
 	p, err := model.FindAllProductsByQuote(c.Param("quote"))
 	if err != nil {
-		log.Err(err).Stack().Send()
+		log.Error().Err(err).Stack().Send()
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -318,7 +316,7 @@ func getAllProductsByQuote(c *gin.Context) {
 func userID(c *gin.Context) uint {
 	userID, err := strconv.Atoi(c.Param("userID"))
 	if err != nil {
-		log.Err(err).Stack().Send()
+		log.Error().Err(err).Stack().Send()
 	}
 	return uint(userID)
 }

@@ -39,7 +39,7 @@ func TestFindAllProducts(t *testing.T) {
 	if err != nil {
 		t.Fail()
 	}
-	util.PrettyPrint(products)
+	util.PrettyPrint(&products)
 
 }
 

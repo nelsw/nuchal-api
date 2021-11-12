@@ -25,6 +25,7 @@ type Position struct {
 	Projection Projection  `json:"projection"`
 	Fills      []BuyFill   `json:"fills,omitempty"`
 	Orders     []SellOrder `json:"orders,omitempty"`
+	Product    Product     `json:"product"`
 }
 
 func GetPortfolio(userID uint) (Portfolio, error) {
@@ -63,19 +64,19 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 
 		var product Product
 		if product, err = FindProductByID(account.Currency + "-USD"); err != nil {
-			log.Err(err).Stack().Send()
+			log.Error().Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
 		var fills []BuyFill
 		if fills, err = GetRemainingBuyFills(userID, product.ID, balance); err != nil {
-			log.Err(err).Stack().Send()
+			log.Error().Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
 		var orders []SellOrder
 		if orders, err = GetOrders(userID, product); err != nil {
-			log.Err(err).Stack().Send()
+			log.Error().Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
@@ -85,12 +86,12 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 			fee += fill.Fee
 		}
 
-		exit := (product.Price * balance) - (product.Price * balance * u.Taker)
+		exit := (product.Posture.Price * balance) - (product.Posture.Price * balance * u.Taker)
 		crypto += exit
 
 		projection := Projection{
 			Buy:  sum,
-			Sell: product.Price * float64(len(fills)),
+			Sell: product.Posture.Price * float64(len(fills)),
 			Fees: fee,
 		}
 
@@ -98,12 +99,13 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 
 		position := Position{
 			ID:         product.ID,
-			Last:       "$" + product.precise(product.Price),
+			Last:       "$" + product.precise(product.Posture.Price),
 			Balance:    balance,
 			Hold:       hold,
 			Projection: projection,
 			Fills:      fills,
 			Orders:     orders,
+			Product:    product,
 		}
 
 		positions = append(positions, position)

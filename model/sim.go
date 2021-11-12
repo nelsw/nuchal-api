@@ -168,7 +168,9 @@ func (t *Trade) loss() float64 {
 }
 
 func (t *Trade) even() float64 {
-	return t.entry() + t.exit()
+	entry := t.in() + (t.in() * t.Pattern.User.Maker)
+	exit := entry + (entry * t.Pattern.User.Taker)
+	return entry + exit
 }
 
 func (t *Trade) investment() float64 {
