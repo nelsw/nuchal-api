@@ -8,31 +8,17 @@ import (
 )
 
 func NewTrade(patternID uint) {
-
-	//pattern.Logger().Trace().Msg("trade")
-	//
-	//var wsDialer ws.Dialer
-	//wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
-	//if err != nil {
-	//	pattern.Logger().Error().Err(err).Msg("opening ws")
-	//	return err
-	//}
-	//
-	//defer func(wsConn *ws.Conn) {
-	//	if err = wsConn.Close(); err != nil {
-	//		pattern.Logger().Error().Err(err).Msg("closing ws")
-	//	}
-	//}(wsConn)
-	//
-	//if err = wsConn.WriteJSON(&cb.Message{
-	//	Type:     "subscribe",
-	//	Channels: []cb.MessageChannel{{"ticker", []string{pattern.Currency()}}},
-	//}); err != nil {
-	//	pattern.Logger().Error().Err(err).Msg("writing ws")
-	//	return err
-	//}
-
 	runTrades(patternID)
+}
+
+func NewSell(patternID uint, orderID string) error {
+	pattern := FindPatternByID(patternID)
+	order, err := GetOrder(pattern, orderID)
+	if err != nil {
+		return err
+	}
+	sell(order, pattern)
+	return nil
 }
 
 func runTrades(patternID uint) {
@@ -64,7 +50,7 @@ func tradeIt(patternID uint) {
 		if pattern.MatchesTweezerBottomPattern(then, that, this) {
 			go buyBabyBuy(pattern)
 			buys++
-			if pattern.Break >= buys {
+			if pattern.Bound == buyBound && pattern.Bind >= buys {
 				pattern.Logger().Info().Int("bind", buys).Msg("bound")
 			}
 		}
@@ -92,17 +78,31 @@ func buyBabyBuy(pattern Pattern) {
 		Str("orderId", order.ID).
 		Msg("created order")
 
-	entry := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
-
 	for {
-		if err = sellBabySell(entry, order.Size, pattern); err == nil {
+		if err = sellBabySell(order, pattern); err != nil {
 			pattern.Logger().Error().Err(err).Msg("sellOrder")
 			break
 		}
 	}
 }
 
-func sellBabySell(entry float64, size string, pattern Pattern) error {
+func sell(order cb.Order, pattern Pattern) {
+	go sellIt(order, pattern)
+	select {}
+}
+
+func sellIt(order cb.Order, pattern Pattern) {
+	for {
+		if err := sellBabySell(order, pattern); err != nil {
+			log.Err(err).Stack().Send()
+			break
+		}
+	}
+}
+
+func sellBabySell(order cb.Order, pattern Pattern) error {
+
+	entry := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
 
 	goal := pattern.GoalPrice(entry)
 	loss := pattern.LossPrice(entry)
@@ -111,26 +111,26 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 		Float64("entry", entry).
 		Float64("goal", goal).
 		Float64("loss", loss).
-		Str("size", size).
+		Str("size", order.Size).
 		Msg("sellOrder")
 
-	var order cb.Order
 	var err error
 
-	if order, err = CreateOrder(pattern, pattern.StopLossOrder(size, loss)); err != nil {
-		pattern.Logger().Error().Err(err).Msg("error placing stop loss order")
+	if order, err = CreateOrder(pattern, pattern.StopLossOrder(order.Size, loss)); err != nil {
+		pattern.Logger().Error().Stack().Err(err).Msg("error placing stop loss order")
 	} // just keep going, yolo my brolo
 
 	var wsDialer ws.Dialer
-	wsConn, _, err := wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil)
-	if err != nil {
-		log.Error().Err(err).Msg("opening ws")
+	var wsConn *ws.Conn
+
+	if wsConn, _, err = wsDialer.Dial("wss://ws-feed.pro.coinbase.com", nil); err != nil {
+		log.Error().Err(err).Stack().Msg("opening ws")
 		return err
 	}
 
 	defer func(wsConn *ws.Conn) {
 		if err = wsConn.Close(); err != nil {
-			log.Error().Err(err).Msg("closing ws")
+			log.Error().Err(err).Stack().Msg("closing ws")
 		}
 	}(wsConn)
 
@@ -138,7 +138,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 		Type:     "subscribe",
 		Channels: []cb.MessageChannel{{"ticker", []string{pattern.Currency()}}},
 	}); err != nil {
-		log.Error().Err(err).Msg("writing ws")
+		log.Error().Err(err).Stack().Msg("writing ws")
 		return err
 	}
 
@@ -150,7 +150,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 			pattern.Logger().Error().Err(err).Msg("error getting price during sellOrder")
 
 			// can't get price info so create a stop entry order in case the price reaches our goal
-			if _, err = CreateOrder(pattern, pattern.NewStopEntryOrder(size, goal)); err != nil {
+			if _, err = CreateOrder(pattern, pattern.NewStopEntryOrder(order.Size, goal)); err != nil {
 				pattern.Logger().Error().Err(err).Msg("error while creating stop entry order")
 			}
 
@@ -169,7 +169,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 		pattern.Logger().Info().Float64("price", price).Float64("goal", goal).Msg("price >= goal")
 
 		// place a stop loss at our goal and try to find a higher price
-		if order, err = CreateOrder(pattern, pattern.StopLossOrder(size, goal)); err != nil {
+		if order, err = CreateOrder(pattern, pattern.StopLossOrder(order.Size, goal)); err != nil {
 			pattern.Logger().Error().Err(err).Float64("price", price).Float64("goal", goal).Msg("error while creating stop loss order")
 
 			// nvm, sellOrder asap - hopefully the price is still higher than our goal
@@ -233,7 +233,7 @@ func sellBabySell(entry float64, size string, pattern Pattern) error {
 				}
 
 				goal = rate.Close
-				if order, err = CreateOrder(pattern, pattern.StopLossOrder(size, goal)); err != nil {
+				if order, err = CreateOrder(pattern, pattern.StopLossOrder(order.Size, goal)); err != nil {
 					log.Error().
 						Err(err).
 						Uint("userID", pattern.UserID).

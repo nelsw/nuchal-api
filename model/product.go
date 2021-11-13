@@ -20,6 +20,7 @@ type Product struct {
 	Min     float64 `json:"min"`
 	Max     float64 `json:"max"`
 	Step    float64 `json:"step"`
+	Fixed   int     `json:"fixed"`
 	Posture Posture `json:"posture,omitempty" gorm:"-"`
 }
 
@@ -47,6 +48,13 @@ func init() {
 }
 
 func (p *Product) AfterFind(tx *gorm.DB) (err error) {
+
+	zeros := 1
+	sides := strings.Split(util.FloatToDecimal(p.Step), ".")
+	if len(sides) > 1 {
+		zeros = len(sides[1])
+	}
+	p.Fixed = zeros
 
 	var omegaRate Rate
 

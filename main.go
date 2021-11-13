@@ -80,6 +80,7 @@ func main() {
 	*/
 	router.GET("/portfolio/:userID", getPortfolio)
 	router.POST("/portfolio/liquidate/:userID", liquidatePortfolio)
+	router.POST("/position/liquidate/:userID/:productID", liquidatePosition)
 
 	/*
 		user
@@ -101,6 +102,7 @@ func main() {
 		trade
 	*/
 	router.POST("/trade/:patternID", startTrading)
+	router.POST("/trade/sell/:orderID/:patternID", startSelling)
 
 	/*
 		order
@@ -176,6 +178,9 @@ func getPattern(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, model.FindPattern(uint(patternID)))
 }
 
+/*
+	trading
+*/
 func startTrading(c *gin.Context) {
 	patternID, err := strconv.Atoi(c.Param("patternID"))
 	if err != nil {
@@ -184,6 +189,24 @@ func startTrading(c *gin.Context) {
 		return
 	}
 	model.NewTrade(uint(patternID))
+	c.Status(200)
+}
+
+func startSelling(c *gin.Context) {
+
+	patternID, err := strconv.Atoi(c.Param("patternID"))
+	if err != nil {
+		log.Error().Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err = model.NewSell(uint(patternID), c.Param("orderID")); err != nil {
+		log.Error().Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
 	c.Status(200)
 }
 
@@ -198,6 +221,15 @@ func getPortfolio(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, portfolio)
+}
+
+func liquidatePosition(c *gin.Context) {
+	if err := model.LiquidatePosition(userID(c), c.Param("productID")); err != nil {
+		log.Error().Err(err).Stack().Send()
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.Status(http.StatusOK)
 }
 
 func liquidatePortfolio(c *gin.Context) {

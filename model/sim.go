@@ -249,7 +249,7 @@ func NewSim(patternID uint, alpha, omega int64) (sim Sim, err error) {
 	for i, this := range rates {
 
 		index := len(summaries)
-		if pattern.Bound == "Buys" && index == pattern.Break {
+		if pattern.Bound == buyBound && index == pattern.Bind {
 			break
 		}
 

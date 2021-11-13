@@ -9,13 +9,30 @@ import (
 	"nuchal-api/util"
 )
 
+type BoundType int
+
+const (
+	notBound BoundType = iota
+	buyBound
+	holdBound
+)
+
+type StatusType int
+
+const (
+	unknown StatusType = iota
+	active
+	errored
+	inactive
+)
+
 // Pattern defines the criteria for matching rates and placing orders.
 type Pattern struct {
 
 	// UintModel
 	UintModel
 
-	// UserId
+	// UserID
 	UserID uint `json:"user_id"`
 
 	// Currency is concatenation of two currencies. e.g. BTC-USD
@@ -34,18 +51,19 @@ type Pattern struct {
 	Delta float64 `json:"delta"`
 
 	// Bound is the context to which this strategy looks to achieve so that it can break.
-	// Values include buys and holds.
-	Bound string `json:"bound"`
+	Bound BoundType `json:"bound"`
 
-	// Break is a numerical value which gets applied to the Bound.
-	Break int `json:"break"`
+	// Bind is a numerical value which gets applied to the Bound.
+	Bind int `json:"bind"`
 
 	// Enable is a flag that allows the system to bind, get bound, and break.
 	Enable bool `json:"enable"`
 
-	Product *Product `json:"product"`
+	Status StatusType `json:"status"`
 
-	User *User `json:"-"`
+	Product Product `json:"product"`
+
+	User User `json:"-"`
 
 	Projection Projection `json:"projection" gorm:"-"`
 }
@@ -120,9 +138,20 @@ func GetPatterns(userID uint) []Pattern {
 	var newPatterns []Pattern
 	for _, pattern := range patterns {
 
-		buy := pattern.Product.Posture.Price * pattern.Size
-		sell := (buy * pattern.Target) + buy
-		fees := (buy * pattern.User.Maker) + (sell * pattern.User.Taker)
+		var buy float64
+		if buy = pattern.Product.Posture.Price * pattern.Size; math.IsNaN(buy) {
+			buy = 0
+		}
+
+		var sell float64
+		if sell = (buy * pattern.Target) + buy; math.IsNaN(sell) {
+			sell = 0
+		}
+
+		var fees float64
+		if fees = (buy * pattern.User.Maker) + (sell * pattern.User.Taker); math.IsNaN(fees) {
+			fees = 0
+		}
 		projection := Projection{
 			Buy:  buy,
 			Sell: sell,

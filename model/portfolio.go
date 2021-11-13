@@ -19,7 +19,6 @@ type Portfolio struct {
 
 type Position struct {
 	ID         string      `json:"id"`
-	Last       string      `json:"last"`
 	Balance    float64     `json:"balance"`
 	Hold       float64     `json:"hold"`
 	Projection Projection  `json:"projection"`
@@ -44,6 +43,7 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 
 	var positions []Position
 	for _, account := range accounts {
+
 		hold := util.StringToFloat64(account.Hold)
 		totalHold += hold
 
@@ -64,19 +64,19 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 
 		var product Product
 		if product, err = FindProductByID(account.Currency + "-USD"); err != nil {
-			log.Error().Err(err).Stack().Send()
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
 		var fills []BuyFill
 		if fills, err = GetRemainingBuyFills(userID, product.ID, balance); err != nil {
-			log.Error().Err(err).Stack().Send()
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
 		var orders []SellOrder
 		if orders, err = GetOrders(userID, product); err != nil {
-			log.Error().Err(err).Stack().Send()
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
@@ -86,20 +86,23 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 			fee += fill.Fee
 		}
 
-		exit := (product.Posture.Price * balance) - (product.Posture.Price * balance * u.Taker)
-		crypto += exit
+		buy := sum / float64(len(fills))
+		entry := buy + (fee / float64(len(fills)))
+		even := entry + (entry * u.Taker)
+
+		crypto += product.Posture.Price * balance
 
 		projection := Projection{
-			Buy:  sum,
-			Sell: product.Posture.Price * float64(len(fills)),
-			Fees: fee,
+			Buy:      buy,
+			BuyText:  "$" + product.precise(buy),
+			Even:     even,
+			EvenText: "$" + product.precise(even),
 		}
 
 		projection.setValues(product.precise)
 
 		position := Position{
 			ID:         product.ID,
-			Last:       "$" + product.precise(product.Posture.Price),
 			Balance:    balance,
 			Hold:       hold,
 			Projection: projection,
@@ -122,6 +125,20 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 	}, nil
 }
 
+func LiquidatePosition(userID uint, productID string) (err error) {
+	var portfolio Portfolio
+	if portfolio, err = GetPortfolio(userID); err == nil {
+		for _, position := range portfolio.Positions {
+			if position.ID == productID {
+				err = liquidatePosition(userID, position)
+				break
+			}
+		}
+	}
+	log.Error().Err(err).Stack().Send()
+	return nil
+}
+
 func LiquidatePortfolio(userID uint) error {
 
 	portfolio, err := GetPortfolio(userID)
@@ -130,15 +147,18 @@ func LiquidatePortfolio(userID uint) error {
 	}
 
 	for _, position := range portfolio.Positions {
-
-		size := util.FloatToDecimal(position.Balance)
-		order := position.Product.NewMarketExitOrder(size)
-
-		if err = PostOrder(userID, order); err != nil {
-			log.Error().Err(err).Stack().Send()
+		if err = liquidatePosition(userID, position); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func liquidatePosition(userID uint, position Position) (err error) {
+	size := util.FloatToDecimal(position.Balance)
+	order := position.Product.NewMarketExitOrder(size)
+	err = PostOrder(userID, order)
+	log.Error().Err(err).Stack().Send()
+	return
 }
