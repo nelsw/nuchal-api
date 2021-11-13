@@ -38,7 +38,7 @@ func NewProductChart(userID uint, productID string, alpha, omega int64) (chart C
 		data = append(data, rate.data())
 	}
 
-	chart.Layer = Layer{candleLayer, productID, data, Settings{}}
+	chart.Layer = Layer{candleLayer, "", data, Settings{}}
 	chart.Layers = []Layer{
 		{orderLayer, "Orders", [][]interface{}{}, Settings{Legend: false, ZIndex: 5}},
 		{splitterLayer, "Splits", [][]interface{}{}, Settings{Legend: false, ZIndex: 10}},

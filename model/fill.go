@@ -8,6 +8,7 @@ import (
 )
 
 type BuyFill struct {
+	ID                  int     `json:"id"`
 	CreatedAtUnixSecond int64   `json:"created_at"`
 	Size                float64 `json:"size"`
 	SizeText            string  `json:"size_text"`
@@ -18,8 +19,9 @@ type BuyFill struct {
 	ProductID           string  `json:"product_id"`
 }
 
-func newBuyFill(fill cb.Fill) BuyFill {
+func newBuyFill(i int, fill cb.Fill) BuyFill {
 	return BuyFill{
+		ID:                  i,
 		CreatedAtUnixSecond: fill.CreatedAt.Time().UTC().Unix(),
 		Size:                util.StringToFloat64(fill.Size),
 		SizeText:            fill.Size,
@@ -56,9 +58,9 @@ func GetRemainingBuyFills(userID uint, productID string, balance float64) ([]Buy
 
 	var buys []BuyFill
 	var bal float64
-	for _, fill := range allFills {
+	for i, fill := range allFills {
 		if fill.Side == "buy" {
-			buys = append(buys, newBuyFill(fill))
+			buys = append(buys, newBuyFill(i, fill))
 			bal += util.StringToFloat64(fill.Size)
 			if bal == balance {
 				break

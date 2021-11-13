@@ -121,3 +121,24 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 		qty,
 	}, nil
 }
+
+func LiquidatePortfolio(userID uint) error {
+
+	portfolio, err := GetPortfolio(userID)
+	if err != nil {
+		return err
+	}
+
+	for _, position := range portfolio.Positions {
+
+		size := util.FloatToDecimal(position.Balance)
+		order := position.Product.NewMarketExitOrder(size)
+
+		if err = PostOrder(userID, order); err != nil {
+			log.Error().Err(err).Stack().Send()
+			return err
+		}
+	}
+
+	return nil
+}

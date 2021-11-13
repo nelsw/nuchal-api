@@ -79,6 +79,7 @@ func main() {
 		portfolio
 	*/
 	router.GET("/portfolio/:userID", getPortfolio)
+	router.POST("/portfolio/liquidate/:userID", liquidatePortfolio)
 
 	/*
 		user
@@ -186,6 +187,9 @@ func startTrading(c *gin.Context) {
 	c.Status(200)
 }
 
+/*
+	portfolio
+*/
 func getPortfolio(c *gin.Context) {
 	portfolio, err := model.GetPortfolio(userID(c))
 	if err != nil {
@@ -194,6 +198,15 @@ func getPortfolio(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, portfolio)
+}
+
+func liquidatePortfolio(c *gin.Context) {
+	if err := model.LiquidatePortfolio(userID(c)); err != nil {
+		log.Error().Err(err).Stack().Send()
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.Status(http.StatusOK)
 }
 
 func getPatternSim(c *gin.Context) {
