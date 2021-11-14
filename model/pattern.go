@@ -119,7 +119,7 @@ func FindPatternByID(patternID uint) Pattern {
 	return pattern
 }
 
-func FindFirstPatternByProductIDOrDefault(user User, productID string) Pattern {
+func FindFirstPatternByProductID(user User, productID string) Pattern {
 	var pattern Pattern
 
 	db.Resolve().

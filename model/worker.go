@@ -14,27 +14,47 @@ type JobType string
 const (
 	InitAllCBProducts JobType = "init all cb products"
 	InitOneDayOfRates         = "init one day of rates"
+	SellAllOfAProduct         = "sell all of a product"
 )
 
 type Job struct {
 	gorm.Model
-	UserID  uint      `gorm:"user_id"`
-	JobType JobType   `gorm:"job_type"`
-	Alpha   time.Time `gorm:"alpha"`
-	Omega   time.Time `gorm:"omega"`
+	UserID  uint    `gorm:"user_id"`
+	JobType JobType `gorm:"job_type"`
+	Message string  `json:"message"`
 }
 
 func init() {
 	db.Migrate(&Job{})
 }
 
-func CheckJobs(userID uint) {
+func lookToSell() {
 	go func() {
-		if err := PerformAllJobs(userID); err != nil {
-			log.Error().Err(err).Stack().Send()
+		for {
+
+			log.Trace().Msg("broker looking for work")
+
+			var jobs []Job
+
+			tx := db.
+				Resolve().
+				Where("job_type = ?", SellAllOfAProduct).
+				Find(&jobs)
+
+			if tx.Error != nil {
+				log.Err(tx.Error).Send()
+				return
+			}
+
+			time.Sleep(time.Second * 15)
 		}
 	}()
 	select {}
+}
+
+func NewSellRequest(userID uint, productID string, size int) {
+	//job := Job{UserID:  userID, JobType: SellAllOfAProduct}
+
 }
 
 func PerformAllJobs(userID uint) error {
@@ -43,8 +63,9 @@ func PerformAllJobs(userID uint) error {
 		Model:   gorm.Model{},
 		UserID:  userID,
 		JobType: InitAllCBProducts,
-		Alpha:   time.Now(),
 	}
+
+	db.Resolve().Create(&productJob)
 
 	if err := productJob.Perform(); err != nil {
 		log.Error().Err(err).Stack().Send()
@@ -55,8 +76,9 @@ func PerformAllJobs(userID uint) error {
 		Model:   gorm.Model{},
 		UserID:  userID,
 		JobType: InitOneDayOfRates,
-		Alpha:   time.Now(),
 	}
+
+	db.Resolve().Create(&ratesJob)
 
 	if err := ratesJob.Perform(); err != nil {
 		log.Error().Err(err).Stack().Send()
@@ -97,8 +119,6 @@ func (j *Job) initAllCBProducts() error {
 		return nil
 	}
 
-	j.Alpha = time.Now()
-
 	var cbCurrencies []cb.Currency
 	var cbProducts []cb.Product
 	var err error
@@ -132,8 +152,7 @@ func (j *Job) initAllCBProducts() error {
 	}
 
 	db.Resolve().Save(&result)
-	j.Omega = time.Now()
-	db.Resolve().Create(j)
+	db.Resolve().Save(j)
 
 	return nil
 }
@@ -147,7 +166,7 @@ func (j *Job) isTimeToDoJob() bool {
 		Order("omega desc").
 		First(&lastJob)
 
-	timeToDoJob := lastJob.ID == uint(0) || lastJob.Omega.After(time.Now().Add(time.Hour*24))
+	timeToDoJob := lastJob.ID == uint(0) || lastJob.UpdatedAt.After(time.Now().Add(time.Hour*24))
 
 	log.Trace().
 		Str("job type", string(j.JobType)).

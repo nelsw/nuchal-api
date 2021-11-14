@@ -58,7 +58,7 @@ const (
 	upType = "up"
 )
 
-type Trade struct {
+type MockTrade struct {
 	Index   int       `json:"index"`
 	Buy     Rate      `json:"buyOrder"`
 	Sell    Rate      `json:"sellOrder"`
@@ -68,8 +68,8 @@ type Trade struct {
 	Taker   float64   `json:"taker"`
 }
 
-func newTrade(index int, pattern Pattern) *Trade {
-	trade := new(Trade)
+func newTrade(index int, pattern Pattern) *MockTrade {
+	trade := new(MockTrade)
 	trade.Index = index
 	trade.Pattern = pattern
 	trade.Maker = pattern.User.Maker
@@ -77,19 +77,19 @@ func newTrade(index int, pattern Pattern) *Trade {
 	return trade
 }
 
-func (t *Trade) in() float64 {
+func (t *MockTrade) in() float64 {
 	return t.Buy.Open
 }
 
-func (t *Trade) entry() float64 {
+func (t *MockTrade) entry() float64 {
 	return t.in() + (t.in() * t.Pattern.User.Maker)
 }
 
-func (t *Trade) exit() float64 {
+func (t *MockTrade) exit() float64 {
 	return t.out() + (t.out() * t.Pattern.User.Taker)
 }
 
-func (t *Trade) out() float64 {
+func (t *MockTrade) out() float64 {
 	if t.Type == lossType {
 		return t.loss()
 	} else if t.Type == evenType {
@@ -105,7 +105,7 @@ func (t *Trade) out() float64 {
 	}
 }
 
-func (t *Trade) color() string {
+func (t *MockTrade) color() string {
 	if t.Type == lossType {
 		return "#FF5722"
 	} else if t.Type == evenType {
@@ -123,7 +123,7 @@ func (t *Trade) color() string {
 	}
 }
 
-func (t *Trade) text() string {
+func (t *MockTrade) text() string {
 	if t.Type == lossType {
 		return fmt.Sprintf("%d - %s", t.Index, `💩`)
 	} else if t.Type == evenType {
@@ -141,7 +141,7 @@ func (t *Trade) text() string {
 	}
 }
 
-func (t *Trade) emoji() string {
+func (t *MockTrade) emoji() string {
 	if t.Type == lossType {
 		return `💩`
 	} else if t.Type == evenType {
@@ -159,52 +159,52 @@ func (t *Trade) emoji() string {
 	}
 }
 
-func (t *Trade) goal() float64 {
+func (t *MockTrade) goal() float64 {
 	return t.Pattern.GoalPrice(t.in())
 }
 
-func (t *Trade) loss() float64 {
+func (t *MockTrade) loss() float64 {
 	return t.Pattern.LossPrice(t.in())
 }
 
-func (t *Trade) even() float64 {
+func (t *MockTrade) even() float64 {
 	entry := t.in() + (t.in() * t.Pattern.User.Maker)
 	exit := entry + (entry * t.Pattern.User.Taker)
 	return entry + exit
 }
 
-func (t *Trade) investment() float64 {
+func (t *MockTrade) investment() float64 {
 	return t.entry() * t.Pattern.Size
 }
 
-func (t *Trade) fees() float64 {
+func (t *MockTrade) fees() float64 {
 	return (t.in() * t.Pattern.User.Maker) + (t.out() * t.Pattern.User.Taker)
 }
 
-func (t *Trade) net() float64 {
+func (t *MockTrade) net() float64 {
 	return t.out() - t.in()
 }
 
-func (t *Trade) gross() float64 {
+func (t *MockTrade) gross() float64 {
 	return t.exit() - t.entry()
 }
 
-func (t *Trade) profit() float64 {
+func (t *MockTrade) profit() float64 {
 	return (t.exit() - t.entry()) * t.Pattern.Size
 }
 
-func (t *Trade) percent() float64 {
+func (t *MockTrade) percent() float64 {
 	return t.profit() / t.investment() * 100
 }
 
-func (t *Trade) orderData() [][]interface{} {
+func (t *MockTrade) orderData() [][]interface{} {
 	return [][]interface{}{
 		{t.Buy.Time().UnixMilli(), 1, t.Pattern.Product.precise(t.in())},
 		{t.Sell.Time().UnixMilli(), 0, t.Pattern.Product.precise(t.out())},
 	}
 }
 
-func (t *Trade) splitData() [][]interface{} {
+func (t *MockTrade) splitData() [][]interface{} {
 	i := float64(t.Index%38) * 25.0 / 1000
 	return [][]interface{}{
 		{t.Buy.Time().UnixMilli(), fmt.Sprintf("%d", t.Index), 0, "#757575", i},
@@ -212,7 +212,7 @@ func (t *Trade) splitData() [][]interface{} {
 	}
 }
 
-func (t *Trade) summary() Summary {
+func (t *MockTrade) summary() Summary {
 	return Summary{
 		TradeNumber: t.Index,
 		BuyTime:     t.Buy.Time().UTC().Format(time.Stamp),
@@ -287,7 +287,7 @@ func NewSim(patternID uint, alpha, omega int64) (sim Sim, err error) {
 	return
 }
 
-func (t *Trade) em(rates []Rate) {
+func (t *MockTrade) em(rates []Rate) {
 
 	for i, rate := range rates {
 

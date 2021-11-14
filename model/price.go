@@ -10,7 +10,7 @@ import (
 )
 
 // getPrice gets the latest ticker price for the given productId.
-func getPrice(wsConn *ws.Conn, pid string) (float64, error) {
+func getPrice(wsConn *ws.Conn, productID string) (float64, error) {
 
 	var receivedMessage cb.Message
 	for {
@@ -18,7 +18,7 @@ func getPrice(wsConn *ws.Conn, pid string) (float64, error) {
 			log.Error().
 				Err(err).
 				Stack().
-				Str("pid", pid).
+				Str("productID", productID).
 				Msg("error reading from websocket")
 			return 0, err
 		}
@@ -32,7 +32,7 @@ func getPrice(wsConn *ws.Conn, pid string) (float64, error) {
 		log.Error().
 			Err(err).
 			Stack().
-			Str("pid", pid).
+			Str("productID", productID).
 			Msg("error getting ticker message from websocket")
 		return 0, err
 	}
