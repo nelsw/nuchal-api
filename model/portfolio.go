@@ -4,6 +4,7 @@ import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/util"
+	"sync"
 	"time"
 )
 
@@ -25,6 +26,40 @@ type Position struct {
 	Fills      []BuyFill   `json:"fills,omitempty"`
 	Orders     []SellOrder `json:"orders,omitempty"`
 	Product    Product     `json:"product"`
+}
+
+func SellFills(userID uint) error {
+
+	u := FindUserByID(userID)
+
+	var accounts []cb.Account
+	var err error
+
+	if accounts, err = u.Client().GetAccounts(); err != nil {
+		log.Err(err).Stack().Send()
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, account := range accounts {
+
+		wg.Add(1)
+
+		if account.Currency == "USD" ||
+			account.Currency == "DASH" ||
+			account.Currency == "ZEC" ||
+			util.StringToFloat64(account.Balance) == 0.0 {
+			continue
+		}
+
+		go func(u User, account cb.Account) {
+
+		}(u, account)
+
+		wg.Done()
+	}
+	wg.Wait()
+	return nil
 }
 
 func GetPortfolio(userID uint) (Portfolio, error) {

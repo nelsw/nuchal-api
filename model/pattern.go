@@ -72,18 +72,12 @@ func init() {
 	db.Migrate(&Pattern{})
 }
 
-func (p Pattern) Logger() *zerolog.Logger {
+func (p Pattern) log() *zerolog.Logger {
 	logger := log.
 		With().
-		Uint("userID", p.UserID).
-		Uint("patternID", p.ID).
-		Str("productID", p.Currency()).
+		Str(`productID`, p.ProductID).
 		Logger()
 	return &logger
-}
-
-func (p Pattern) Currency() string {
-	return p.Product.ID
 }
 
 func (p *Pattern) GoalPrice(price float64) float64 {
@@ -122,6 +116,36 @@ func FindPatternByID(patternID uint) Pattern {
 		Preload("User").
 		Where("id = ?", patternID).
 		Find(&pattern)
+	return pattern
+}
+
+func FindFirstPatternByProductIDOrDefault(user User, productID string) Pattern {
+	var pattern Pattern
+
+	db.Resolve().
+		Preload("User").
+		Preload("Product").
+		Where("product_id = ?", productID).
+		First(&pattern)
+
+	if &pattern == (&Pattern{}) {
+
+		var product Product
+		db.Resolve().
+			Where("product_id = ?", productID).
+			First(&product)
+
+		pattern = Pattern{
+			UserID:    user.ID,
+			ProductID: productID,
+			Target:    (user.Taker + user.Maker) * 3,
+			Tolerance: .1,
+			Enable:    true,
+			Product:   product,
+			User:      user,
+		}
+	}
+
 	return pattern
 }
 

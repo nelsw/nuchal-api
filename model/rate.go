@@ -21,6 +21,7 @@ package model
 import (
 	ws "github.com/gorilla/websocket"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"nuchal-api/db"
@@ -59,28 +60,40 @@ func init() {
 	db.Migrate(&Rate{})
 }
 
-func (v *Rate) IsDown() bool {
-	return v.Open > v.Close
+func (r Rate) log() *zerolog.Logger {
+	logger := log.
+		With().
+		Str("productID", r.ProductID).
+		Float64("open", r.Open).
+		Float64("high", r.High).
+		Float64("low", r.Low).
+		Float64("close", r.Close).
+		Logger()
+	return &logger
 }
 
-func (v *Rate) IsUp() bool {
-	return !v.IsDown()
+func (r *Rate) IsDown() bool {
+	return r.Open > r.Close
 }
 
-func (v *Rate) IsInit() bool {
-	return v != nil && v != (&Rate{})
+func (r *Rate) IsUp() bool {
+	return !r.IsDown()
 }
 
-func (v *Rate) avg() float64 {
-	return (v.Open + v.High + v.Low + v.Close) / 4
+func (r *Rate) IsInit() bool {
+	return r != nil && r != (&Rate{})
 }
 
-func (v *Rate) Time() time.Time {
-	return time.Unix(v.UnixSecond, 0)
+func (r *Rate) avg() float64 {
+	return (r.Open + r.High + r.Low + r.Close) / 4
 }
 
-func (v *Rate) data() []interface{} {
-	return []interface{}{v.Time().UnixMilli(), v.Open, v.High, v.Low, v.Close, v.Volume}
+func (r *Rate) Time() time.Time {
+	return time.Unix(r.UnixSecond, 0)
+}
+
+func (r *Rate) data() []interface{} {
+	return []interface{}{r.Time().UnixMilli(), r.Open, r.High, r.Low, r.Close, r.Volume}
 }
 
 func FindFirstRateByProductIDInTimeDescOrder(productID string, r *Rate) {
@@ -254,7 +267,7 @@ func getRate(wsConn *ws.Conn, productID string) (Rate, error) {
 				Volume: volume,
 			})
 
-			log.Info().Interface("rate", rate).Send()
+			rate.log().Info().Msg("rate")
 
 			return rate, nil
 		}

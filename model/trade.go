@@ -36,12 +36,12 @@ func tradeIt(patternID uint) {
 		pattern := FindPatternByID(patternID)
 
 		if !pattern.Enable {
-			pattern.Logger().Info().Msg("pattern disabled")
+			pattern.log().Info().Msg("pattern disabled")
 			return
 		}
 
-		if this, err = rate(pattern.Currency()); err != nil {
-			pattern.Logger().Error().Err(err).Msg("rate")
+		if this, err = rate(pattern.ProductID); err != nil {
+			pattern.log().Error().Err(err).Msg("rate")
 			then = Rate{}
 			that = Rate{}
 			continue
@@ -51,7 +51,7 @@ func tradeIt(patternID uint) {
 			go buyBabyBuy(pattern)
 			buys++
 			if pattern.Bound == buyBound && pattern.Bind >= buys {
-				pattern.Logger().Info().Int("bind", buys).Msg("bound")
+				pattern.log().Info().Int("bind", buys).Msg("bound")
 			}
 		}
 
@@ -62,25 +62,25 @@ func tradeIt(patternID uint) {
 
 func buyBabyBuy(pattern Pattern) {
 
-	pattern.Logger().Info().Msg("buyOrder")
+	pattern.log().Info().Msg("buyOrder")
 
 	order, err := CreateOrder(pattern, pattern.NewMarketEntryOrder())
 
 	if err != nil {
-		pattern.Logger().Error().Err(err).Msg("buyOrder")
+		pattern.log().Error().Err(err).Msg("buyOrder")
 		return
 	}
 
 	log.Info().
 		Uint("userID", pattern.UserID).
 		Uint("patternID", pattern.ID).
-		Str("productID", pattern.Currency()).
+		Str("productID", pattern.ProductID).
 		Str("orderId", order.ID).
 		Msg("created order")
 
 	for {
 		if err = sellBabySell(order, pattern); err != nil {
-			pattern.Logger().Error().Err(err).Msg("sellOrder")
+			pattern.log().Error().Err(err).Msg("sellOrder")
 			break
 		}
 	}
@@ -107,7 +107,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 	goal := pattern.GoalPrice(entry)
 	loss := pattern.LossPrice(entry)
 
-	pattern.Logger().Info().
+	pattern.log().Info().
 		Float64("entry", entry).
 		Float64("goal", goal).
 		Float64("loss", loss).
@@ -117,7 +117,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 	var err error
 
 	if order, err = CreateOrder(pattern, pattern.StopLossOrder(order.Size, loss)); err != nil {
-		pattern.Logger().Error().Stack().Err(err).Msg("error placing stop loss order")
+		pattern.log().Error().Stack().Err(err).Msg("error placing stop loss order")
 	} // just keep going, yolo my brolo
 
 	var wsDialer ws.Dialer
@@ -136,7 +136,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 
 	if err = wsConn.WriteJSON(&cb.Message{
 		Type:     "subscribe",
-		Channels: []cb.MessageChannel{{"ticker", []string{pattern.Currency()}}},
+		Channels: []cb.MessageChannel{{"ticker", []string{pattern.ProductID}}},
 	}); err != nil {
 		log.Error().Err(err).Stack().Msg("writing ws")
 		return err
@@ -146,19 +146,19 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 
 		var price float64
 
-		if price, err = getPrice(wsConn, pattern.Currency()); err != nil {
-			pattern.Logger().Error().Err(err).Msg("error getting price during sellOrder")
+		if price, err = getPrice(wsConn, pattern.ProductID); err != nil {
+			pattern.log().Error().Err(err).Msg("error getting price during sellOrder")
 
 			// can't get price info so create a stop entry order in case the price reaches our goal
 			if _, err = CreateOrder(pattern, pattern.NewStopEntryOrder(order.Size, goal)); err != nil {
-				pattern.Logger().Error().Err(err).Msg("error while creating stop entry order")
+				pattern.log().Error().Err(err).Msg("error while creating stop entry order")
 			}
 
 			return err // can't proceed without price data, return an error and RUN IT AGAIN!
 		}
 
 		if price <= loss {
-			pattern.Logger().Info().Float64("price", price).Float64("exit", loss).Msg("price <= loss")
+			pattern.log().Info().Float64("price", price).Float64("exit", loss).Msg("price <= loss")
 			return nil
 		}
 
@@ -166,23 +166,23 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 			continue
 		}
 
-		pattern.Logger().Info().Float64("price", price).Float64("goal", goal).Msg("price >= goal")
+		pattern.log().Info().Float64("price", price).Float64("goal", goal).Msg("price >= goal")
 
 		// place a stop loss at our goal and try to find a higher price
 		if order, err = CreateOrder(pattern, pattern.StopLossOrder(order.Size, goal)); err != nil {
-			pattern.Logger().Error().Err(err).Float64("price", price).Float64("goal", goal).Msg("error while creating stop loss order")
+			pattern.log().Error().Err(err).Float64("price", price).Float64("goal", goal).Msg("error while creating stop loss order")
 
 			// nvm, sellOrder asap - hopefully the price is still higher than our goal
 
 			if order, err = CreateOrder(pattern, pattern.NewMarketExitOrder()); err != nil {
-				pattern.Logger().Error().Err(err).Float64("price", price).Float64("goal", goal).Msg("error while creating market exit order")
+				pattern.log().Error().Err(err).Float64("price", price).Float64("goal", goal).Msg("error while creating market exit order")
 
 				return err // wow, we can't even place a market exit order, RUN IT AGAIN!
 			}
 
 			log.Info().
 				Uint("userID", pattern.UserID).
-				Str("productID", pattern.Currency()).
+				Str("productID", pattern.ProductID).
 				Float64("goal", goal).
 				Float64("exit", util.StringToFloat64(order.ExecutedValue)/util.StringToFloat64(order.Size)).
 				Msg("price >= goal")
@@ -194,11 +194,11 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 
 			var rate Rate
 
-			if rate, err = getRate(wsConn, pattern.Currency()); err != nil {
+			if rate, err = getRate(wsConn, pattern.ProductID); err != nil {
 				log.Error().
 					Err(err).
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.Currency()).
+					Str("productID", pattern.ProductID).
 					Msg("error while getting rate during price climb")
 				continue // since we have a stop loss placed, no harm in continuing onto the next rate
 			}
@@ -206,7 +206,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 			if rate.Low <= goal {
 				log.Info().
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.Currency()).
+					Str("productID", pattern.ProductID).
 					Float64("rate.Low", rate.Low).
 					Float64("exit", goal).
 					Msg("rate.Low <= goal, sold")
@@ -216,7 +216,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 			if rate.Close > goal {
 				log.Info().
 					Uint("userID", pattern.UserID).
-					Str("productID", pattern.Currency()).
+					Str("productID", pattern.ProductID).
 					Float64("rate.Close", rate.Close).
 					Float64("goal", goal).
 					Msg("rate.Close > goal, we found a better price!")
@@ -225,7 +225,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 					log.Error().
 						Err(err).
 						Uint("userID", pattern.UserID).
-						Str("productID", pattern.Currency()).
+						Str("productID", pattern.ProductID).
 						Float64("rate.Close", rate.Close).
 						Float64("goal", goal).
 						Msg("error while canceling order during price climb")
@@ -237,7 +237,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 					log.Error().
 						Err(err).
 						Uint("userID", pattern.UserID).
-						Str("productID", pattern.Currency()).
+						Str("productID", pattern.ProductID).
 						Msg("error while creating stop loss order")
 
 					// sellOrder asap - we have no stops in place
@@ -246,7 +246,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 						log.Error().
 							Err(err).
 							Uint("userID", pattern.UserID).
-							Str("productID", pattern.Currency()).
+							Str("productID", pattern.ProductID).
 							Float64("price", price).
 							Float64("goal", goal).
 							Msg("error while creating market exit order after failing to create stop loss order during sellOrder")
@@ -255,7 +255,7 @@ func sellBabySell(order cb.Order, pattern Pattern) error {
 
 					log.Info().
 						Uint("userID", pattern.UserID).
-						Str("productID", pattern.Currency()).
+						Str("productID", pattern.ProductID).
 						Float64("goal", goal).
 						Float64("exit", util.StringToFloat64(order.ExecutedValue)/util.StringToFloat64(order.Size)).
 						Msg("sold")

@@ -8,12 +8,13 @@ import (
 )
 
 type SellOrder struct {
-	ID                  string  `json:"id"`
-	CreatedAtUnixSecond int64   `json:"created_at"`
-	Price               float64 `json:"price"`
-	PriceText           string  `json:"price_text"`
-	Size                float64 `json:"size"`
-	SizeText            string  `json:"size_text"`
+	ID                  string   `json:"id"`
+	CreatedAtUnixSecond int64    `json:"created_at"`
+	Price               float64  `json:"price"`
+	PriceText           string   `json:"price_text"`
+	Size                float64  `json:"size"`
+	SizeText            string   `json:"size_text"`
+	Order               cb.Order `json:"order"`
 }
 
 // CreateOrder creates an order on Coinbase and returns the order once it is no longer pending and has settled.
@@ -21,18 +22,18 @@ func CreateOrder(pattern Pattern, order cb.Order, attempt ...int) (cb.Order, err
 
 	u := FindUserByID(pattern.UserID)
 
-	pattern.Logger().Info().Str("orderID", order.ID).Msg("create order")
+	pattern.log().Info().Str("orderID", order.ID).Msg("create order")
 
 	r, err := u.Client().CreateOrder(&order)
 	if err == nil {
 
-		pattern.Logger().Info().Str("orderID", order.ID).Msg("created order")
+		pattern.log().Info().Str("orderID", order.ID).Msg("created order")
 
 		return GetOrder(pattern, r.ID)
 	}
 
 	if err != nil {
-		pattern.Logger().Error().Err(err).Str("orderID", order.ID).Msg("order")
+		pattern.log().Error().Err(err).Str("orderID", order.ID).Msg("order")
 	}
 
 	i := util.FirstIntOrZero(attempt)
@@ -50,42 +51,43 @@ func GetOrder(pattern Pattern, orderID string, attempt ...int) (cb.Order, error)
 
 	u := FindUserByID(pattern.UserID)
 
-	pattern.Logger().Info().Str("orderID", orderID).Msg("get order")
+	pattern.log().Info().Str("orderID", orderID).Msg("get order")
 
 	order, err := u.Client().GetOrder(orderID)
 
+	i := util.FirstIntOrZero(attempt) + 1
+
 	if err != nil {
 
-		i := util.FirstIntOrZero(attempt)
-
-		pattern.Logger().Error().
+		pattern.log().Error().
 			Err(err).
 			Str("orderID", orderID).
 			Int("attempt", i).
 			Msg("error getting order")
 
-		if i > 10 {
+		if i == 10 {
 			return cb.Order{}, err
 		}
 
-		i++
 		time.Sleep(time.Duration(i*3) * time.Second)
 		return GetOrder(pattern, orderID, i)
 	}
 
-	if !order.Settled || order.Status == "pending" {
+	util.PrettyPrint(order)
 
-		pattern.Logger().Warn().
-			Str("orderID", orderID).
-			Str("side", order.Side).
-			Str("type", order.Type).
-			Msg("got order, but it's pending or unsettled")
+	//if !order.Settled || order.Status == "pending" {
+	//
+	//	pattern.log().Warn().
+	//		Str("orderID", orderID).
+	//		Str("side", order.Side).
+	//		Str("type", order.Type).
+	//		Msg("got order, but it's pending or unsettled")
+	//
+	//	time.Sleep(time.Duration(i*3) * time.Second)
+	//	return GetOrder(pattern, orderID, i)
+	//}
 
-		time.Sleep(1 * time.Second)
-		return GetOrder(pattern, orderID, 0)
-	}
-
-	pattern.Logger().Info().
+	pattern.log().Info().
 		Str("orderID", orderID).
 		Str("side", order.Side).
 		Str("type", order.Type).
@@ -99,22 +101,22 @@ func CancelOrder(pattern Pattern, orderID string, attempt ...int) error {
 
 	u := FindUserByID(pattern.UserID)
 
-	pattern.Logger().Info().Str("orderID", orderID).Msg("cancel order")
+	pattern.log().Info().Str("orderID", orderID).Msg("cancel order")
 
 	err := u.Client().CancelOrder(orderID)
 	if err == nil {
-		pattern.Logger().Info().Str("orderID", orderID).Msg("canceled order")
+		pattern.log().Info().Str("orderID", orderID).Msg("canceled order")
 		return nil
 	}
 
 	i := util.FirstIntOrZero(attempt)
-	pattern.Logger().Error().
+	pattern.log().Error().
 		Err(err).
 		Str("orderID", orderID).
 		Int("attempt", i).
 		Msg("error canceling order")
 
-	if i > 10 {
+	if i == 10 {
 		return err
 	}
 
@@ -141,6 +143,7 @@ func GetOrders(userID uint, product Product) ([]SellOrder, error) {
 				PriceText:           "$" + product.precise(util.StringToFloat64(order.Price)),
 				Size:                util.StringToFloat64(order.Size),
 				SizeText:            product.precise(util.StringToFloat64(order.Size)),
+				Order:               order,
 			})
 		}
 

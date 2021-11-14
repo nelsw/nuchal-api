@@ -1,8 +1,6 @@
 package model
 
 import (
-	"fmt"
-	"nuchal-api/util"
 	"testing"
 )
 
@@ -10,10 +8,14 @@ func TestGetPortfolio(t *testing.T) {
 
 	userID := uint(1)
 
-	portfolio, err := GetPortfolio(userID)
+	_, err := GetPortfolio(userID)
 	if err != nil {
 		t.Fail()
 	}
+}
 
-	fmt.Println(util.Pretty(portfolio))
+func TestSellFills(t *testing.T) {
+
+	_ = SellFills(uint(1))
+
 }
