@@ -166,3 +166,9 @@ func DeleteOrder(userID uint, orderID string) (err error) {
 	err = u.Client().CancelOrder(orderID)
 	return
 }
+
+func DeleteOrders(userID uint, productID string) (err error) {
+	u := FindUserByID(userID)
+	_, err = u.Client().CancelAllOrders(cb.CancelAllOrdersParams{ProductID: productID})
+	return
+}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog"
@@ -13,32 +12,11 @@ import (
 	"nuchal-api/util"
 	"os"
 	"strconv"
-	"strings"
-	"time"
 )
 
 func init() {
-
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
 	zerolog.SetGlobalLevel(zerolog.TraceLevel)
-
-	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
-
-	output.FormatLevel = func(i interface{}) string {
-		return strings.ToUpper(fmt.Sprintf("| %-6s|", i))
-	}
-	output.FormatMessage = func(i interface{}) string {
-		return fmt.Sprintf("***%s****", i)
-	}
-	output.FormatFieldName = func(i interface{}) string {
-		return fmt.Sprintf("%s:", i)
-	}
-	output.FormatFieldValue = func(i interface{}) string {
-		return strings.ToUpper(fmt.Sprintf("%s", i))
-	}
-
-	//go model.CheckJobs(uint(1))
 }
 
 func CORS() gin.HandlerFunc {
@@ -102,20 +80,45 @@ func main() {
 		trade
 	*/
 	router.POST("/trade/:patternID", startTrading)
-	router.POST("/trade/sell/:orderID/:patternID", startSelling)
+	router.POST("/trade/sell/:price/:size/:productID", startSelling)
 
 	/*
 		order
 	*/
 	router.DELETE("/order/:userID/:orderID", deleteOrder)
 	router.POST("/order/:userID", postOrder)
+	router.DELETE("/orders/:userID/:productID", deleteOrders)
 
 	/*
 		chart
 	*/
 	router.GET("/chart/product/:userID/:productID/:alpha/:omega", getProductChart)
 
+	/*
+		session
+	*/
+	router.GET("/sessions/:userID", getSessions)
+	router.GET("/session/sell/:price/:size/:productID", startSellSession)
+
 	router.Run("localhost:9080")
+}
+
+/*
+	sessions
+*/
+func getSessions(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, model.GetSessions(userID(c)))
+}
+
+func startSellSession(c *gin.Context) {
+
+	price := util.StringToFloat64(c.Param("price"))
+	size := util.StringToFloat64(c.Param("size"))
+	productID := c.Param("productID")
+
+	model.StartSellSession(price, size, productID)
+
+	c.Status(http.StatusOK)
 }
 
 func getProductChart(c *gin.Context) {
@@ -136,6 +139,15 @@ func getProductChart(c *gin.Context) {
 
 func deleteOrder(c *gin.Context) {
 	if err := model.DeleteOrder(userID(c), c.Param("orderID")); err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	c.Status(200)
+}
+
+func deleteOrders(c *gin.Context) {
+	if err := model.DeleteOrders(userID(c), c.Param("productID")); err != nil {
 		log.Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
 		return
@@ -194,15 +206,11 @@ func startTrading(c *gin.Context) {
 
 func startSelling(c *gin.Context) {
 
-	patternID, err := strconv.Atoi(c.Param("patternID"))
-	if err != nil {
-		log.Error().Err(err).Stack().Send()
-		c.Status(http.StatusBadRequest)
-		return
-	}
+	price := util.StringToFloat64(c.Param("price"))
+	size := util.StringToFloat64(c.Param("size"))
 
-	if err = model.NewSell(uint(patternID), c.Param("orderID")); err != nil {
-		log.Error().Err(err).Stack().Send()
+	if err := model.NewSell(price, size, c.Param("productID")); err != nil {
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
 		return
 	}

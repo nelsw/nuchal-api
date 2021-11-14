@@ -60,15 +60,17 @@ func init() {
 	db.Migrate(&Rate{})
 }
 
-func (r Rate) log() *zerolog.Logger {
-	logger := log.
-		With().
+func (r Rate) Run(event *zerolog.Event, level zerolog.Level, msg string) {
+	event.
 		Str("productID", r.ProductID).
 		Float64("open", r.Open).
 		Float64("high", r.High).
 		Float64("low", r.Low).
-		Float64("close", r.Close).
-		Logger()
+		Float64("close", r.Close)
+}
+
+func (r Rate) log() *zerolog.Logger {
+	logger := log.Hook(r)
 	return &logger
 }
 

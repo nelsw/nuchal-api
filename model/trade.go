@@ -6,26 +6,12 @@ import (
 	"nuchal-api/util"
 )
 
-type Trade struct {
-	UintModel
-
-	PatternID uint `json:"pattern_id"`
-
-	Pattern Pattern
-}
-
 func NewTrade(patternID uint) {
 	runTrades(patternID)
 }
 
-func NewSell(patternID uint, orderID string) error {
-	pattern := FindPatternByID(patternID)
-	order, err := GetOrder(pattern, orderID)
-	if err != nil {
-		return err
-	}
-	sell(order, pattern)
-	return nil
+func NewSell(price, size float64, productID string) error {
+	return sellMe(price, util.FloatToDecimal(size), FindFirstPatternByProductID(productID))
 }
 
 func runTrades(patternID uint) {
@@ -36,7 +22,7 @@ func runTrades(patternID uint) {
 func tradeIt(patternID uint) {
 
 	var err error
-	var buys int
+	var buys int64
 	var then, that, this Rate
 	for {
 
@@ -48,7 +34,7 @@ func tradeIt(patternID uint) {
 		}
 
 		if this, err = rate(pattern.ProductID); err != nil {
-			pattern.log().Error().Err(err).Msg("rate")
+			pattern.log().Err(err).Msg("rate")
 			then = Rate{}
 			that = Rate{}
 			continue
@@ -58,7 +44,7 @@ func tradeIt(patternID uint) {
 			go buyBabyBuy(pattern)
 			buys++
 			if pattern.Bound == buyBound && pattern.Bind >= buys {
-				pattern.log().Info().Int("bind", buys).Msg("bound")
+				pattern.log().Info().Int64("bind", buys).Msg("bound")
 			}
 		}
 
@@ -93,42 +79,15 @@ func buyBabyBuy(pattern Pattern) {
 	}
 }
 
-func sell(order cb.Order, pattern Pattern) {
-	go func(order cb.Order, pattern Pattern) {
-		for {
-			if err := sellBabySell(order, pattern); err != nil {
-				log.Err(err).Stack().Send()
-				break
-			}
-		}
-	}(order, pattern)
-	select {}
-}
-
 func sellBabySell(order cb.Order, pattern Pattern) error {
-	entry := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
-
-	goal := pattern.GoalPrice(entry)
-	loss := pattern.LossPrice(entry)
-
-	pattern.log().Info().
-		Float64("entry", entry).
-		Float64("goal", goal).
-		Float64("loss", loss).
-		Str("size", order.Size).
-		Msg("sellOrder")
-
-	return sellIt(goal, loss, order.Size, pattern)
-}
-
-func sellIt(goal, loss float64, size string, pattern Pattern) error {
-	if _, err := CreateOrder(pattern, pattern.StopLossOrder(size, loss)); err != nil {
+	price := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
+	if _, err := CreateOrder(pattern, pattern.StopLossOrder(order.Size, pattern.LossPrice(price))); err != nil {
 		pattern.log().Err(err).Stack().Msg("error placing stop loss order")
 	} // just keep going, yolo my brolo
-	return sellMe(goal, loss, size, pattern)
+	return sellMe(price, order.Size, pattern)
 }
 
-func sellMe(goal, loss float64, size string, pattern Pattern) error {
+func sellMe(price float64, size string, pattern Pattern) error {
 
 	var pipe *Pipe
 	var err error
@@ -142,6 +101,16 @@ func sellMe(goal, loss float64, size string, pattern Pattern) error {
 			log.Err(err).Send()
 		}
 	}(pipe)
+
+	goal := pattern.GoalPrice(price)
+	loss := pattern.LossPrice(price)
+
+	pattern.log().Info().
+		Float64("price", price).
+		Float64("goal", goal).
+		Float64("loss", loss).
+		Str("size", size).
+		Msg("sellOrder")
 
 	for {
 

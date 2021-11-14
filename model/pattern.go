@@ -54,7 +54,7 @@ type Pattern struct {
 	Bound BoundType `json:"bound"`
 
 	// Bind is a numerical value which gets applied to the Bound.
-	Bind int `json:"bind"`
+	Bind int64 `json:"bind"`
 
 	// Enable is a flag that allows the system to bind, get bound, and break.
 	Enable bool `json:"enable"`
@@ -81,11 +81,17 @@ func (p Pattern) log() *zerolog.Logger {
 }
 
 func (p *Pattern) GoalPrice(price float64) float64 {
-	return price + (price * p.Target)
+	return util.StringToFloat64(p.Product.precise(price + (price * p.Target)))
 }
 
 func (p *Pattern) LossPrice(price float64) float64 {
-	return price - (price * p.Tolerance)
+	return util.StringToFloat64(p.Product.precise(price - (price * p.Tolerance)))
+}
+
+func (p *Pattern) EvenPrice(price float64) float64 {
+	entry := (price * p.User.Maker) + price
+	exit := (entry * p.User.Taker) + entry
+	return exit
 }
 
 func (p *Pattern) MatchesTweezerBottomPattern(then, that, this Rate) bool {
@@ -119,7 +125,7 @@ func FindPatternByID(patternID uint) Pattern {
 	return pattern
 }
 
-func FindFirstPatternByProductID(user User, productID string) Pattern {
+func FindFirstPatternByProductID(productID string) Pattern {
 	var pattern Pattern
 
 	db.Resolve().
@@ -127,24 +133,6 @@ func FindFirstPatternByProductID(user User, productID string) Pattern {
 		Preload("Product").
 		Where("product_id = ?", productID).
 		First(&pattern)
-
-	if &pattern == (&Pattern{}) {
-
-		var product Product
-		db.Resolve().
-			Where("product_id = ?", productID).
-			First(&product)
-
-		pattern = Pattern{
-			UserID:    user.ID,
-			ProductID: productID,
-			Target:    (user.Taker + user.Maker) * 3,
-			Tolerance: .1,
-			Enable:    true,
-			Product:   product,
-			User:      user,
-		}
-	}
 
 	return pattern
 }
@@ -200,6 +188,16 @@ func FindPattern(id uint) Pattern {
 		Where("id = ?", id).
 		Find(&pattern)
 	return pattern
+}
+
+func (p Pattern) placeMarketEntryOrder() (float64, float64, error) {
+	order, err := CreateOrder(p, p.NewMarketEntryOrder())
+	if err != nil {
+		return 0, 0, err
+	}
+	price := util.StringToFloat64(order.ExecutedValue) / util.StringToFloat64(order.Size)
+	size := util.StringToFloat64(order.Size)
+	return price, size, nil
 }
 
 func (p Pattern) NewMarketEntryOrder() cb.Order {

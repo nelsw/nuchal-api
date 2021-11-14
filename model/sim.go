@@ -22,7 +22,7 @@ type Analysis struct {
 }
 
 type Summary struct {
-	TradeNumber int    `json:"trade_number"`
+	TradeNumber int64  `json:"trade_number"`
 	BuyPrice    string `json:"buy_price"`
 	BuyTime     string `json:"buy_time"`
 	SellPrice   string `json:"sell_price"`
@@ -59,7 +59,7 @@ const (
 )
 
 type MockTrade struct {
-	Index   int       `json:"index"`
+	Index   int64     `json:"index"`
 	Buy     Rate      `json:"buyOrder"`
 	Sell    Rate      `json:"sellOrder"`
 	Type    TradeType `json:"trade_type"`
@@ -68,7 +68,7 @@ type MockTrade struct {
 	Taker   float64   `json:"taker"`
 }
 
-func newTrade(index int, pattern Pattern) *MockTrade {
+func newTrade(index int64, pattern Pattern) *MockTrade {
 	trade := new(MockTrade)
 	trade.Index = index
 	trade.Pattern = pattern
@@ -248,7 +248,7 @@ func NewSim(patternID uint, alpha, omega int64) (sim Sim, err error) {
 
 	for i, this := range rates {
 
-		index := len(summaries)
+		index := int64(len(summaries))
 		if pattern.Bound == buyBound && index == pattern.Bind {
 			break
 		}
