@@ -28,35 +28,6 @@ func init() {
 	db.Migrate(&Job{})
 }
 
-func lookToSell() {
-	go func() {
-		for {
-
-			log.Trace().Msg("broker looking for work")
-
-			var jobs []Job
-
-			tx := db.
-				Resolve().
-				Where("job_type = ?", SellAllOfAProduct).
-				Find(&jobs)
-
-			if tx.Error != nil {
-				log.Err(tx.Error).Send()
-				return
-			}
-
-			time.Sleep(time.Second * 15)
-		}
-	}()
-	select {}
-}
-
-func NewSellRequest(userID uint, productID string, size int) {
-	//job := Job{UserID:  userID, JobType: SellAllOfAProduct}
-
-}
-
 func PerformAllJobs(userID uint) error {
 
 	productJob := &Job{
