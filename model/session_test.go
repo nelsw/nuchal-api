@@ -6,6 +6,7 @@ import (
 	"nuchal-api/util"
 	"os"
 	"testing"
+	"time"
 )
 
 func init() {
@@ -16,7 +17,8 @@ func init() {
 
 func TestStartSellSession(t *testing.T) {
 
-	StartSellSession(2.0579, 1.0, "TRAC-USD")
+	StartSellSession(0.23482, 4, "REQ-USD")
+	time.Sleep(time.Second * 5)
 
 }
 

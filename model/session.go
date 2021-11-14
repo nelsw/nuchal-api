@@ -1,12 +1,14 @@
 package model
 
 import (
+	"fmt"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"nuchal-api/db"
 	"nuchal-api/util"
+	"strings"
 )
 
 type SessionOutcome int
@@ -32,12 +34,14 @@ type Session struct {
 	UserID    uint            `json:"user_id"`
 	ProductID string          `json:"product_id"`
 	Size      float64         `json:"size"`
+	Step      float64         `json:"step"`
 	Results   []SessionResult `json:"results" gorm:"polymorphic:Session;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
 
 type BuySession struct {
 	Session
 	PatternID uint `json:"pattern_id"`
+	Enabled   bool `json:"enabled"`
 }
 
 type SellSession struct {
@@ -72,17 +76,72 @@ func GetSessions(userID uint) Sessions {
 	return sessions
 }
 
+func DeleteBuySession(ID uint) {
+	db.Resolve().Delete(&BuySession{}, ID)
+}
+
+func DeleteSellSession(ID uint) {
+	db.Resolve().Delete(&SellSession{}, ID)
+}
+
+func DisableBuySession(ID uint) {
+	var s BuySession
+	db.Resolve().First(&s, ID)
+	s.Enabled = false
+	db.Resolve().Save(&s)
+}
+
+func EnableBuySession(ID uint) {
+	var s BuySession
+	db.Resolve().First(&s, ID)
+	s.Enabled = true
+	db.Resolve().Save(&s)
+	go s.buy()
+}
+
+/*
+	session methods
+*/
+func (s *Session) errorResult(logger *zerolog.Logger, err error) {
+	logger.Err(err).Send()
+	s.Results = append(s.Results, SessionResult{SessionID: s.ID, Error: err.Error(), Outcome: errorOutcome})
+	db.Resolve().Save(s)
+}
+
+func (s *Session) precise(f float64) string {
+	sides := strings.Split(util.FloatToDecimal(s.Step), ".")
+	if len(sides) > 1 {
+		return fmt.Sprintf("%"+fmt.Sprintf(".%df", len(sides[1])), f)
+	}
+	return sides[0]
+}
+
 /*
 	buy session methods
 */
 
 func StartBuySession(patternID uint) {
 
-	session := &BuySession{PatternID: patternID}
+	pattern := FindPatternByID(patternID)
+	session := &BuySession{
+		Enabled:   true,
+		PatternID: patternID,
+		Session: Session{
+			ProductID: pattern.ProductID,
+			UserID:    pattern.UserID,
+			Size:      pattern.Size,
+			Step:      pattern.Product.Step,
+		},
+	}
 
 	db.Resolve().Create(&session)
 
 	go session.buy()
+}
+
+func (s *BuySession) isEnabled() bool {
+	db.Resolve().First(s, s.ID)
+	return s.Enabled
 }
 
 func (s *BuySession) log() *zerolog.Logger {
@@ -113,14 +172,14 @@ func (s *BuySession) buy() {
 	var then, that, this Rate
 	for {
 
-		pattern := FindPatternByID(s.PatternID)
-
-		if !pattern.Enable {
-
+		if !s.Enabled {
+			s.log().Info().Msg("disabled")
 			s.Results = append(s.Results, SessionResult{SessionID: s.ID, Outcome: disabledOutcome})
 			db.Resolve().Save(s)
 			return
 		}
+
+		pattern := FindPatternByID(s.PatternID)
 
 		if pattern.Bound == buyBound && s.getBuyCount() >= pattern.Bind {
 			s.Results = append(s.Results, SessionResult{SessionID: s.ID, Outcome: boundOutcome})
@@ -133,17 +192,18 @@ func (s *BuySession) buy() {
 			return
 		}
 
-		if !pattern.MatchesTweezerBottomPattern(then, that, this) {
-			continue
-		}
+		if pattern.MatchesTweezerBottomPattern(then, that, this) {
+			var price, size float64
+			if price, size, err = s.camp(); err != nil {
+				s.errorResult(s.log(), err)
+				return
+			}
 
-		var price, size float64
-		if price, size, err = pattern.placeMarketEntryOrder(); err != nil {
-			s.errorResult(s.log(), err)
-			return
-		}
+			s.Results = append(s.Results, SessionResult{SessionID: s.ID, Price: price, Outcome: buyOutcome})
+			db.Resolve().Save(s)
 
-		go startSellSession(price, size, pattern)
+			go startSellSession(price, size, pattern)
+		}
 
 		then = that
 		that = this
@@ -161,11 +221,34 @@ func (s *BuySession) getBuyCount() int64 {
 	return count
 }
 
+func (s *BuySession) camp() (float64, float64, error) {
+
+	u := FindUserByID(s.UserID)
+	order, err := u.Client().CreateOrder(&cb.Order{
+		ProductID: s.ProductID,
+		Side:      "buy",
+		Size:      util.FloatToDecimal(s.Size),
+		Type:      "market",
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+
+	order, err = u.Client().GetOrder(order.ID)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	size := util.StringToFloat64(order.Size)
+	price := util.StringToFloat64(order.ExecutedValue) / size
+	return price, size, nil
+}
+
 /*
 	sell session methods
 */
 func StartSellSession(price, size float64, productID string) {
-	startSellSession(price, size, FindFirstPatternByProductID(productID))
+	go startSellSession(price, size, FindFirstPatternByProductID(productID))
 }
 
 func startSellSession(price, size float64, pattern Pattern) {
@@ -175,6 +258,7 @@ func startSellSession(price, size float64, pattern Pattern) {
 			UserID:    pattern.UserID,
 			ProductID: pattern.ProductID,
 			Size:      size,
+			Step:      pattern.Product.Step,
 		},
 		Price: price,
 		Goal:  pattern.GoalPrice(price),
@@ -186,7 +270,9 @@ func startSellSession(price, size float64, pattern Pattern) {
 
 	db.Resolve().Create(&session)
 
-	session.sell()
+	session.log().Trace().Msg("starting")
+
+	go session.sell()
 }
 
 func (s *SellSession) Run(event *zerolog.Event, level zerolog.Level, msg string) {
@@ -268,14 +354,15 @@ func (s *SellSession) sell() {
 		for {
 
 			var rate Rate
-			l := s.log().Hook(rate)
-			l.Trace().Send()
 
 			if rate, err = pipe.getRate(); err != nil {
-				l.Trace().Msg("error getting price to find gain")
-				s.errorResult(&l, err)
+				s.log().Trace().Msg("error getting price to find gain")
+				s.errorResult(s.log(), err)
 				return
 			}
+
+			l := s.log().Hook(rate)
+			l.Trace().Send()
 
 			if rate.Low <= price {
 				l.Trace().Msg("rate.low <= price")
@@ -308,11 +395,11 @@ func (s *SellSession) anchor() (string, error) {
 	u := FindUserByID(s.UserID)
 	order, err := u.Client().CreateOrder(&cb.Order{
 		ProductID: s.ProductID,
-		Price:     util.FloatToDecimal(s.Price),
+		Price:     s.precise(s.Price),
 		Side:      "sell",
-		Size:      util.FloatToDecimal(s.Size),
+		Size:      s.precise(s.Size),
 		Type:      "limit",
-		StopPrice: util.FloatToDecimal(s.Price),
+		StopPrice: s.precise(s.Price),
 		Stop:      "loss",
 	})
 	if err != nil {
@@ -332,7 +419,7 @@ func (s *SellSession) anchorOrExit() (string, error) {
 	_, err = u.Client().CreateOrder(&cb.Order{
 		ProductID: s.ProductID,
 		Side:      "sell",
-		Size:      util.FloatToDecimal(s.Size),
+		Size:      s.precise(s.Price),
 		Type:      "market",
 	})
 	return "", err
@@ -357,25 +444,5 @@ func (s *SellSession) goalResult() {
 func (s *SellSession) gainResult(price float64) {
 	s.log().Info().Msg("gain")
 	s.Results = append(s.Results, SessionResult{SessionID: s.ID, Price: price, Outcome: gainOutcome})
-	db.Resolve().Save(s)
-}
-
-func (s *SellSession) errorResult(logger *zerolog.Logger, err error) {
-	logger.Err(err).Send()
-	s.Results = append(s.Results, SessionResult{
-		SessionID: s.ID,
-		Error:     err.Error(),
-		Outcome:   errorOutcome,
-	})
-	db.Resolve().Save(s)
-}
-
-func (s *BuySession) errorResult(logger *zerolog.Logger, err error) {
-	logger.Err(err).Send()
-	s.Results = append(s.Results, SessionResult{
-		SessionID: s.ID,
-		Error:     err.Error(),
-		Outcome:   errorOutcome,
-	})
 	db.Resolve().Save(s)
 }

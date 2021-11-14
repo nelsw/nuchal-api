@@ -5,6 +5,7 @@ import (
 	ws "github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	cb "github.com/preichenberger/go-coinbasepro/v2"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"nuchal-api/util"
 	"time"
@@ -13,6 +14,15 @@ import (
 type Pipe struct {
 	wsConn    *ws.Conn
 	productID string
+}
+
+func (p *Pipe) log() *zerolog.Logger {
+	logger := log.Hook(p)
+	return &logger
+}
+
+func (p *Pipe) Run(event *zerolog.Event, level zerolog.Level, msg string) {
+	event.Str("productID", p.productID)
 }
 
 func NewPipe(productID string) (*Pipe, error) {
@@ -34,7 +44,7 @@ func (p *Pipe) OpenPipe() error {
 		return err
 	}
 
-	log.Trace().Msg("pipe connected")
+	p.log().Trace().Msg("connected")
 
 	if err = p.wsConn.WriteJSON(&cb.Message{
 		Type:     "subscribe",
@@ -44,14 +54,14 @@ func (p *Pipe) OpenPipe() error {
 		return err
 	}
 
-	log.Trace().Msg("pipe subscribed")
+	p.log().Trace().Msg("subscribed")
 
 	return nil
 }
 
 func (p *Pipe) ClosePipe() error {
 	if err := p.wsConn.Close(); err != nil {
-		log.Err(err).Msg("closing pipe")
+		p.log().Err(err).Stack().Send()
 		return err
 	}
 	return nil
@@ -63,11 +73,7 @@ func (p *Pipe) getPrice() (float64, error) {
 	var receivedMessage cb.Message
 	for {
 		if err := p.wsConn.ReadJSON(&receivedMessage); err != nil {
-			log.Error().
-				Err(err).
-				Stack().
-				Str("productID", p.productID).
-				Msg("error reading from websocket")
+			p.log().Err(err).Stack().Send()
 			return 0, err
 		}
 		if receivedMessage.Type != "subscriptions" {
@@ -77,11 +83,7 @@ func (p *Pipe) getPrice() (float64, error) {
 
 	if receivedMessage.Type != "ticker" {
 		err := errors.New(fmt.Sprintf("message type != ticker, %v", receivedMessage))
-		log.Error().
-			Err(err).
-			Stack().
-			Str("productID", p.productID).
-			Msg("error getting ticker message from websocket")
+		p.log().Err(err).Stack().Send()
 		return 0, err
 	}
 
@@ -92,12 +94,12 @@ func (p *Pipe) getRate() (Rate, error) {
 
 	end := time.Now().Add(time.Minute)
 
-	var low, high, open, volume float64
+	var err error
+	var price, low, high, open, volume float64
 	for {
 
-		price, err := p.getPrice()
-		if err != nil {
-			log.Error().Err(err).Str("productID", p.productID).Msg("price")
+		if price, err = p.getPrice(); err != nil {
+			p.log().Err(err).Stack().Send()
 			return Rate{}, err
 		}
 
@@ -123,8 +125,6 @@ func (p *Pipe) getRate() (Rate, error) {
 				Close:  price,
 				Volume: volume,
 			})
-
-			rate.log().Info().Msg("rate")
 
 			return rate, nil
 		}

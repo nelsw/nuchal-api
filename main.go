@@ -77,12 +77,6 @@ func main() {
 	router.DELETE("/pattern/:patternID", deletePattern)
 
 	/*
-		trade
-	*/
-	router.POST("/trade/:patternID", startTrading)
-	router.POST("/trade/sell/:price/:size/:productID", startSelling)
-
-	/*
 		order
 	*/
 	router.DELETE("/order/:userID/:orderID", deleteOrder)
@@ -98,7 +92,12 @@ func main() {
 		session
 	*/
 	router.GET("/sessions/:userID", getSessions)
-	router.GET("/session/sell/:price/:size/:productID", startSellSession)
+	router.PUT("/session/buy/enable/:ID", enableBuySession)
+	router.PUT("/session/buy/disable/:ID", disableBuySession)
+	router.POST("/session/buy/:patternID", startBuySession)
+	router.POST("/session/sell/:price/:size/:productID", startSellSession)
+	router.DELETE("/session/sell/:ID", deleteSellSession)
+	router.DELETE("/session/buy/:ID", deleteBuySession)
 
 	router.Run("localhost:9080")
 }
@@ -110,6 +109,22 @@ func getSessions(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, model.GetSessions(userID(c)))
 }
 
+func deleteBuySession(c *gin.Context) {
+	model.DeleteBuySession(util.StringToUint(c.Param("ID")))
+}
+
+func deleteSellSession(c *gin.Context) {
+	model.DeleteSellSession(util.StringToUint(c.Param("ID")))
+}
+
+func disableBuySession(c *gin.Context) {
+	model.DisableBuySession(util.StringToUint(c.Param("ID")))
+}
+
+func enableBuySession(c *gin.Context) {
+	model.EnableBuySession(util.StringToUint(c.Param("ID")))
+}
+
 func startSellSession(c *gin.Context) {
 
 	price := util.StringToFloat64(c.Param("price"))
@@ -118,6 +133,11 @@ func startSellSession(c *gin.Context) {
 
 	model.StartSellSession(price, size, productID)
 
+	c.Status(http.StatusOK)
+}
+
+func startBuySession(c *gin.Context) {
+	model.StartBuySession(util.StringToUint(c.Param("patternID")))
 	c.Status(http.StatusOK)
 }
 
@@ -188,34 +208,6 @@ func getPattern(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, model.FindPattern(uint(patternID)))
-}
-
-/*
-	trading
-*/
-func startTrading(c *gin.Context) {
-	patternID, err := strconv.Atoi(c.Param("patternID"))
-	if err != nil {
-		log.Error().Err(err).Stack().Send()
-		c.Status(http.StatusBadRequest)
-		return
-	}
-	model.NewTrade(uint(patternID))
-	c.Status(200)
-}
-
-func startSelling(c *gin.Context) {
-
-	price := util.StringToFloat64(c.Param("price"))
-	size := util.StringToFloat64(c.Param("size"))
-
-	if err := model.NewSell(price, size, c.Param("productID")); err != nil {
-		log.Err(err).Stack().Send()
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	c.Status(200)
 }
 
 /*

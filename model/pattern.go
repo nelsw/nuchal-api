@@ -17,15 +17,6 @@ const (
 	holdBound
 )
 
-type StatusType int
-
-const (
-	unknown StatusType = iota
-	active
-	errored
-	inactive
-)
-
 // Pattern defines the criteria for matching rates and placing orders.
 type Pattern struct {
 
@@ -59,8 +50,6 @@ type Pattern struct {
 	// Enable is a flag that allows the system to bind, get bound, and break.
 	Enable bool `json:"enable"`
 
-	Status StatusType `json:"status"`
-
 	Product Product `json:"product"`
 
 	User User `json:"-"`
@@ -91,7 +80,7 @@ func (p *Pattern) LossPrice(price float64) float64 {
 func (p *Pattern) EvenPrice(price float64) float64 {
 	entry := (price * p.User.Maker) + price
 	exit := (entry * p.User.Taker) + entry
-	return exit
+	return util.StringToFloat64(p.Product.precise(exit))
 }
 
 func (p *Pattern) MatchesTweezerBottomPattern(then, that, this Rate) bool {
