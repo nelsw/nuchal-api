@@ -27,14 +27,14 @@ func (p *Pipe) Run(event *zerolog.Event, level zerolog.Level, msg string) {
 
 func NewPipe(productID string) (*Pipe, error) {
 	p := &Pipe{productID: productID}
-	if err := p.OpenPipe(); err != nil {
+	if err := p.Open(); err != nil {
 		log.Err(err).Stack().Send()
 		return nil, err
 	}
 	return p, nil
 }
 
-func (p *Pipe) OpenPipe() error {
+func (p *Pipe) Open() error {
 
 	var wsDialer ws.Dialer
 	var err error
@@ -44,7 +44,7 @@ func (p *Pipe) OpenPipe() error {
 		return err
 	}
 
-	p.log().Trace().Msg("connected")
+	p.log().Debug().Msg("connected")
 
 	if err = p.wsConn.WriteJSON(&cb.Message{
 		Type:     "subscribe",
@@ -54,16 +54,30 @@ func (p *Pipe) OpenPipe() error {
 		return err
 	}
 
-	p.log().Trace().Msg("subscribed")
+	p.log().Debug().Msg("subscribed")
 
 	return nil
 }
 
-func (p *Pipe) ClosePipe() error {
+func (p *Pipe) Close() error {
 	if err := p.wsConn.Close(); err != nil {
 		p.log().Err(err).Stack().Send()
 		return err
 	}
+	return nil
+}
+
+func (p *Pipe) Reopen() error {
+	p.log().Debug().Msg("reopening")
+	if err := p.Close(); err != nil {
+		p.log().Err(err).Stack().Send()
+		return err
+	}
+	if err := p.Open(); err != nil {
+		p.log().Err(err).Stack().Send()
+		return err
+	}
+	p.log().Debug().Msg("reopened")
 	return nil
 }
 

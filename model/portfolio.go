@@ -3,8 +3,8 @@ package model
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
+	"math"
 	"nuchal-api/util"
-	"sync"
 	"time"
 )
 
@@ -19,47 +19,33 @@ type Portfolio struct {
 }
 
 type Position struct {
-	ID         string      `json:"id"`
-	Balance    float64     `json:"balance"`
-	Hold       float64     `json:"hold"`
-	Projection Projection  `json:"projection"`
-	Fills      []BuyFill   `json:"fills,omitempty"`
-	Orders     []SellOrder `json:"orders,omitempty"`
-	Product    Product     `json:"product"`
-}
 
-func SellFills(userID uint) error {
+	// ID is effectively the Product ID
+	ID string `json:"id"`
 
-	u := FindUserByID(userID)
+	// Balance is the quantity of the product owned.
+	Balance float64 `json:"balance"`
 
-	var accounts []cb.Account
-	var err error
+	// Hold is the quantity of owned products with limit orders placed.
+	Hold float64 `json:"hold"`
 
-	if accounts, err = u.Client().GetAccounts(); err != nil {
-		log.Err(err).Stack().Send()
-		return err
-	}
+	// Value is the dollar change amount of the position at the most recent market price.
+	Value float64 `json:"value"`
 
-	var wg sync.WaitGroup
-	for _, account := range accounts {
+	// Place is the percent change result to quantify position result.
+	Place float64 `json:"place"`
 
-		wg.Add(1)
+	// Projection should be deprecated. Carry on.
+	Projection Projection `json:"projection"`
 
-		if account.Currency == "USD" ||
-			account.Currency == "DASH" ||
-			account.Currency == "ZEC" ||
-			util.StringToFloat64(account.Balance) == 0.0 {
-			continue
-		}
+	// Fills are all the buy fills for this position.
+	Fills []BuyFill `json:"fills,omitempty"`
 
-		go func(u User, account cb.Account) {
+	// Orders are the limit entry and limit loss orders placed.
+	Orders []SellOrder `json:"orders,omitempty"`
 
-		}(u, account)
-
-		wg.Done()
-	}
-	wg.Wait()
-	return nil
+	// Product is the product this position represents.
+	Product Product `json:"product"`
 }
 
 func GetPortfolio(userID uint) (Portfolio, error) {
@@ -115,13 +101,21 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 			return Portfolio{}, err
 		}
 
-		var sum, fee float64
+		var sum, fee, size float64
 		for _, fill := range fills {
-			sum += fill.Price
+			sum += (fill.Price * fill.Size) + fill.Fee
+			size += fill.Size
 			fee += fill.Fee
 		}
 
-		buy := sum / float64(len(fills))
+		now := size * product.Posture.Price
+		out := math.Max(sum, now) - math.Min(sum, now)
+		place := out / sum * 100
+		if sum > now && place > 0 {
+			place *= -1
+		}
+
+		buy := sum / size
 		entry := buy + (fee / float64(len(fills)))
 		even := entry + (entry * u.Taker)
 
@@ -140,6 +134,8 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 			ID:         product.ID,
 			Balance:    balance,
 			Hold:       hold,
+			Value:      now,
+			Place:      place,
 			Projection: projection,
 			Fills:      fills,
 			Orders:     orders,

@@ -102,7 +102,13 @@ func EnableBuySession(ID uint) {
 /*
 	session methods
 */
-func (s *Session) errorResult(logger *zerolog.Logger, err error) {
+func (s *SellSession) errorResult(logger *zerolog.Logger, err error) {
+	logger.Err(err).Send()
+	s.Results = append(s.Results, SessionResult{SessionID: s.ID, Error: err.Error(), Outcome: errorOutcome})
+	db.Resolve().Save(s)
+}
+
+func (s *BuySession) errorResult(logger *zerolog.Logger, err error) {
 	logger.Err(err).Send()
 	s.Results = append(s.Results, SessionResult{SessionID: s.ID, Error: err.Error(), Outcome: errorOutcome})
 	db.Resolve().Save(s)
@@ -164,7 +170,7 @@ func (s *BuySession) buy() {
 	}
 
 	defer func(pipe *Pipe) {
-		if err := pipe.ClosePipe(); err != nil {
+		if err := pipe.Close(); err != nil {
 			s.errorResult(s.log(), err)
 		}
 	}(pipe)
@@ -182,27 +188,42 @@ func (s *BuySession) buy() {
 		pattern := FindPatternByID(s.PatternID)
 
 		if pattern.Bound == buyBound && s.getBuyCount() >= pattern.Bind {
+			s.log().Info().Msg("bound")
 			s.Results = append(s.Results, SessionResult{SessionID: s.ID, Outcome: boundOutcome})
 			db.Resolve().Save(s)
 			return
 		}
 
 		if this, err = pipe.getRate(); err != nil {
-			s.errorResult(s.log(), err)
-			return
-		}
-
-		if pattern.MatchesTweezerBottomPattern(then, that, this) {
-			var price, size float64
-			if price, size, err = s.camp(); err != nil {
+			if err = pipe.Reopen(); err != nil {
 				s.errorResult(s.log(), err)
 				return
 			}
+			then = Rate{}
+			that = Rate{}
+			continue
+		}
+
+		if pattern.MatchesTweezerBottomPattern(then, that, this) {
+
+			s.log().Debug().Msg("pattern found!")
+
+			var price, size float64
+			if price, size, err = s.camp(); err != nil {
+				s.log().Debug().Msg("error camping")
+				s.errorResult(s.log(), err)
+				return
+			}
+
+			s.log().Debug().Msg("camped out")
 
 			s.Results = append(s.Results, SessionResult{SessionID: s.ID, Price: price, Outcome: buyOutcome})
 			db.Resolve().Save(s)
 
 			go startSellSession(price, size, pattern)
+
+		} else {
+			s.log().Debug().Msg("!tweezer")
 		}
 
 		then = that
@@ -224,23 +245,26 @@ func (s *BuySession) getBuyCount() int64 {
 func (s *BuySession) camp() (float64, float64, error) {
 
 	u := FindUserByID(s.UserID)
+
 	order, err := u.Client().CreateOrder(&cb.Order{
 		ProductID: s.ProductID,
 		Side:      "buy",
-		Size:      util.FloatToDecimal(s.Size),
+		Size:      s.precise(s.Size),
 		Type:      "market",
 	})
+
 	if err != nil {
+		s.log().Err(err).Msg("creating a camp order")
 		return 0, 0, err
 	}
 
-	order, err = u.Client().GetOrder(order.ID)
-	if err != nil {
+	if order, err = u.Client().GetOrder(order.ID); err != nil {
+		s.log().Err(err).Msg("getting a camp order")
 		return 0, 0, err
 	}
 
 	size := util.StringToFloat64(order.Size)
-	price := util.StringToFloat64(order.ExecutedValue) / size
+	price := util.StringToFloat64(s.precise(util.StringToFloat64(order.ExecutedValue) / size))
 	return price, size, nil
 }
 
@@ -270,7 +294,7 @@ func startSellSession(price, size float64, pattern Pattern) {
 
 	db.Resolve().Create(&session)
 
-	session.log().Trace().Msg("starting")
+	session.log().Debug().Msg("starting")
 
 	go session.sell()
 }
@@ -292,7 +316,7 @@ func (s *SellSession) log() *zerolog.Logger {
 
 func (s *SellSession) sell() {
 
-	s.log().Trace().Msg("sell")
+	s.log().Debug().Msg("sell")
 
 	var orderID string
 	var pipe *Pipe
@@ -303,49 +327,59 @@ func (s *SellSession) sell() {
 		return
 	}
 
+	s.log().Debug().Str("orderID", orderID).Msg("initial anchor set")
+
 	if pipe, err = NewPipe(s.ProductID); err != nil {
 		s.errorResult(s.log(), err)
 		return
 	}
 
-	defer func(pipe *Pipe) {
-		if err := pipe.ClosePipe(); err != nil {
+	s.log().Debug().Str("orderID", orderID).Msg("piped in")
+
+	defer func(pipe *Pipe, err error) {
+		if err = pipe.Close(); err != nil {
 			s.errorResult(s.log(), err)
 		}
-	}(pipe)
+	}(pipe, err)
 
 	for {
 
 		var price float64
 
 		if price, err = pipe.getPrice(); err != nil {
-			s.log().Trace().Msg("error getting price to find goal")
+			s.log().Debug().Str("orderID", orderID).Msg("error getting price to find goal")
 			s.errorResult(s.log(), err)
 			return
 		}
 
 		if price <= s.Loss {
-			s.log().Trace().Msg("price <= goal")
+			s.log().Debug().Str("orderID", orderID).Float64("price", price).Msg("price <= loss")
 			s.lossResult()
 			return
 		}
 
 		if price < s.Goal {
-			s.log().Trace().Msg("price < goal")
+			s.log().Debug().Str("orderID", orderID).Float64("price", price).Msg("price < goal")
 			continue
 		}
 
+		s.log().Debug().Str("orderID", orderID).Float64("price", price).Msg("price >= goal")
+
 		if err = s.cancelOrder(orderID); err != nil {
-			s.log().Trace().Msg("error canceling stop loss to anchor for goal")
+			s.log().Debug().Str("orderID", orderID).Msg("error canceling stop loss to anchor for goal")
 			s.errorResult(s.log(), err)
 			return
 		}
 
+		s.log().Debug().Float64("price", price).Str("orderID", orderID).Msg("initial stop loss canceled")
+
 		if orderID, err = s.anchorOrExit(); err != nil {
-			s.log().Trace().Msg("error anchoring for goal")
+			s.log().Debug().Msg("error anchoring for goal")
 			s.errorResult(s.log(), err)
 			return
 		}
+
+		s.log().Debug().Float64("price", price).Str("orderID", orderID).Msg("new stop loss created")
 
 		/*
 			TIME TO CLIMB BABY WOOOOOOT
@@ -356,36 +390,41 @@ func (s *SellSession) sell() {
 			var rate Rate
 
 			if rate, err = pipe.getRate(); err != nil {
-				s.log().Trace().Msg("error getting price to find gain")
+				s.log().Debug().Msg("error getting price to find gain")
 				s.errorResult(s.log(), err)
 				return
 			}
 
 			l := s.log().Hook(rate)
-			l.Trace().Send()
+			l.Debug().Send()
 
 			if rate.Low <= price {
-				l.Trace().Msg("rate.low <= price")
+				l.Debug().Msg("rate.low <= price")
 				s.goalResult()
 				return
 			}
 
 			if rate.Close > price {
 
+				l.Debug().Msg("rate.close > price")
+
 				if err = s.cancelOrder(orderID); err != nil {
-					l.Trace().Msg("error canceling stop loss to anchor for gain")
+					l.Debug().Msg("error canceling stop loss to anchor for gain")
 					s.errorResult(&l, err)
 					return
 				}
 
+				l.Debug().Msg("rate.close > price")
+
 				if orderID, err = s.anchorOrExit(); err != nil {
-					l.Trace().Msg("error anchoring for gain")
+					l.Debug().Msg("error anchoring for gain")
 					s.errorResult(&l, err)
 					return
 				}
 
 				// the new price to beat
 				price = rate.Close
+				l.Debug().Msg("price == rate.close")
 			}
 		}
 	}
@@ -429,6 +468,7 @@ func (s *SellSession) cancelOrder(orderID string) error {
 	u := FindUserByID(s.UserID)
 	return u.Client().CancelOrder(orderID)
 }
+
 func (s *SellSession) lossResult() {
 	s.log().Info().Msg("loss")
 	s.Results = append(s.Results, SessionResult{SessionID: s.ID, Price: s.Loss, Outcome: lossOutcome})

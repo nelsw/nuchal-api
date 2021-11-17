@@ -7,10 +7,10 @@ import (
 
 func TestNewSim(t *testing.T) {
 
-	sim, err := NewSim(uint(1), alpha, omega)
+	sim, err := NewSim(uint(20), alpha, omega)
 	if err != nil {
 		t.Fail()
 	}
 
-	util.PrettyPrint(sim)
+	util.PrettyPrint(sim.Analysis)
 }

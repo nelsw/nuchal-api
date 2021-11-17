@@ -33,7 +33,7 @@ func newBuyFill(i int, fill cb.Fill) BuyFill {
 	}
 }
 
-func GetRemainingBuyFills(userID uint, productID string, balance float64) ([]BuyFill, error) {
+func GetAllFills(userID uint, productID string) ([]cb.Fill, error) {
 
 	u := FindUserByID(userID)
 
@@ -55,6 +55,16 @@ func GetRemainingBuyFills(userID uint, productID string, balance float64) ([]Buy
 	sort.SliceStable(allFills, func(i, j int) bool {
 		return allFills[i].CreatedAt.Time().After(allFills[j].CreatedAt.Time())
 	})
+
+	return allFills, nil
+}
+
+func GetRemainingBuyFills(userID uint, productID string, balance float64) ([]BuyFill, error) {
+
+	allFills, err := GetAllFills(userID, productID)
+	if err != nil {
+		return nil, err
+	}
 
 	var buys []BuyFill
 	var bal float64

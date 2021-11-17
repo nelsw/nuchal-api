@@ -16,7 +16,7 @@ import (
 
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 }
 
 func CORS() gin.HandlerFunc {
@@ -99,7 +99,25 @@ func main() {
 	router.DELETE("/session/sell/:ID", deleteSellSession)
 	router.DELETE("/session/buy/:ID", deleteBuySession)
 
+	/*
+		history
+	*/
+	router.GET("/history/:userID", getHistory)
+
 	router.Run("localhost:9080")
+}
+
+/*
+	history
+*/
+func getHistory(c *gin.Context) {
+	his, err := model.GetHistory(userID(c))
+	if err != nil {
+		log.Err(err).Stack().Send()
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, his)
 }
 
 /*
