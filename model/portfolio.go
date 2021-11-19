@@ -5,17 +5,13 @@ import (
 	"github.com/rs/zerolog/log"
 	"math"
 	"nuchal-api/util"
-	"time"
 )
 
 type Portfolio struct {
-	Time      time.Time  `json:"time"`
 	Positions []Position `json:"positions"`
 	Cash      string     `json:"cash"`
 	Crypto    string     `json:"crypto"`
 	Value     string     `json:"value"`
-	Hold      float64    `json:"hold"`
-	Qty       float64    `json:"qty"`
 }
 
 type Position struct {
@@ -32,11 +28,11 @@ type Position struct {
 	// Value is the dollar change amount of the position at the most recent market price.
 	Value float64 `json:"value"`
 
+	// Sum is the amount spent on the position == (fill.size * fill.price) + fill.fee
+	Sum float64 `json:"sum"`
+
 	// Place is the percent change result to quantify position result.
 	Place float64 `json:"place"`
-
-	// Projection should be deprecated. Carry on.
-	Projection Projection `json:"projection"`
 
 	// Fills are all the buy fills for this position.
 	Fills []BuyFill `json:"fills,omitempty"`
@@ -44,7 +40,7 @@ type Position struct {
 	// Orders are the limit entry and limit loss orders placed.
 	Orders []SellOrder `json:"orders,omitempty"`
 
-	// Product is the product this position represents.
+	// Product is the product this position represents. ↑↓
 	Product Product `json:"product"`
 }
 
@@ -101,72 +97,59 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 			return Portfolio{}, err
 		}
 
-		var sum, fee, size float64
+		var sum float64
 		for _, fill := range fills {
 			sum += (fill.Price * fill.Size) + fill.Fee
-			size += fill.Size
-			fee += fill.Fee
 		}
 
-		now := size * product.Posture.Price
+		now := balance * product.Posture.Price
 		out := math.Max(sum, now) - math.Min(sum, now)
 		place := out / sum * 100
 		if sum > now && place > 0 {
 			place *= -1
 		}
 
-		buy := sum / size
-		entry := buy + (fee / float64(len(fills)))
-		even := entry + (entry * u.Taker)
-
 		crypto += product.Posture.Price * balance
 
-		projection := Projection{
-			Buy:      buy,
-			BuyText:  "$" + product.precise(buy),
-			Even:     even,
-			EvenText: "$" + product.precise(even),
-		}
-
-		projection.setValues(product.precise)
-
-		position := Position{
-			ID:         product.ID,
-			Balance:    balance,
-			Hold:       hold,
-			Value:      now,
-			Place:      place,
-			Projection: projection,
-			Fills:      fills,
-			Orders:     orders,
-			Product:    product,
-		}
-
-		positions = append(positions, position)
+		positions = append(positions, Position{
+			ID:      product.ID,
+			Balance: balance,
+			Hold:    hold,
+			Value:   now,
+			Sum:     sum,
+			Place:   place,
+			Fills:   fills,
+			Orders:  orders,
+			Product: product,
+		})
 	}
 
 	return Portfolio{
-		time.Now(),
 		positions,
 		util.FloatToUsd(cash),
 		util.FloatToUsd(crypto),
 		util.FloatToUsd(cash + crypto),
-		totalHold,
-		qty,
 	}, nil
 }
 
-func LiquidatePosition(userID uint, productID string) (err error) {
-	var portfolio Portfolio
-	if portfolio, err = GetPortfolio(userID); err == nil {
-		for _, position := range portfolio.Positions {
-			if position.ID == productID {
-				err = liquidatePosition(userID, position)
-				break
-			}
+func LiquidatePosition(userID uint, productID string) error {
+
+	portfolio, err := GetPortfolio(userID)
+	if err != nil {
+		log.Err(err).Stack().Send()
+		return err
+	}
+
+	for _, position := range portfolio.Positions {
+		if position.ID != productID {
+			continue
+		}
+		if err = liquidatePosition(userID, position); err != nil {
+			log.Err(err).Stack().Send()
+			return err
 		}
 	}
-	log.Error().Err(err).Stack().Send()
+
 	return nil
 }
 
@@ -174,11 +157,13 @@ func LiquidatePortfolio(userID uint) error {
 
 	portfolio, err := GetPortfolio(userID)
 	if err != nil {
+		log.Err(err).Stack().Send()
 		return err
 	}
 
 	for _, position := range portfolio.Positions {
 		if err = liquidatePosition(userID, position); err != nil {
+			log.Err(err).Stack().Send()
 			return err
 		}
 	}
@@ -189,7 +174,8 @@ func LiquidatePortfolio(userID uint) error {
 func liquidatePosition(userID uint, position Position) (err error) {
 	size := util.FloatToDecimal(position.Balance)
 	order := position.Product.NewMarketExitOrder(size)
-	err = PostOrder(userID, order)
-	log.Error().Err(err).Stack().Send()
+	if err = PostOrder(userID, order); err != nil {
+		log.Err(err).Stack().Send()
+	}
 	return
 }

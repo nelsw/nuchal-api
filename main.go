@@ -234,7 +234,7 @@ func getPattern(c *gin.Context) {
 func getPortfolio(c *gin.Context) {
 	portfolio, err := model.GetPortfolio(userID(c))
 	if err != nil {
-		log.Error().Err(err).Stack().Send()
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -243,7 +243,7 @@ func getPortfolio(c *gin.Context) {
 
 func liquidatePosition(c *gin.Context) {
 	if err := model.LiquidatePosition(userID(c), c.Param("productID")); err != nil {
-		log.Error().Err(err).Stack().Send()
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -252,7 +252,7 @@ func liquidatePosition(c *gin.Context) {
 
 func liquidatePortfolio(c *gin.Context) {
 	if err := model.LiquidatePortfolio(userID(c)); err != nil {
-		log.Error().Err(err).Stack().Send()
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -369,7 +369,7 @@ func getAllProducts(c *gin.Context) {
 func getAllProductsByQuote(c *gin.Context) {
 	p, err := model.FindAllProductsByQuote(c.Param("quote"))
 	if err != nil {
-		log.Error().Err(err).Stack().Send()
+		log.Err(err).Stack().Send()
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -379,7 +379,8 @@ func getAllProductsByQuote(c *gin.Context) {
 func userID(c *gin.Context) uint {
 	userID, err := strconv.Atoi(c.Param("userID"))
 	if err != nil {
-		log.Error().Err(err).Stack().Send()
+		log.Err(err).Stack().Send()
+		return 0
 	}
 	return uint(userID)
 }
