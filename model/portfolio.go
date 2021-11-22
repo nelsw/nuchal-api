@@ -3,34 +3,45 @@ package model
 import (
 	cb "github.com/preichenberger/go-coinbasepro/v2"
 	"github.com/rs/zerolog/log"
+	"math"
 	"nuchal-api/util"
-	"time"
 )
 
 type Portfolio struct {
-	Time      time.Time  `json:"time"`
 	Positions []Position `json:"positions"`
 	Cash      string     `json:"cash"`
 	Crypto    string     `json:"crypto"`
 	Value     string     `json:"value"`
-	Hold      float64    `json:"hold"`
-	Qty       float64    `json:"qty"`
 }
 
 type Position struct {
-	ID      string     `json:"id"`
-	Balance float64    `json:"balance"`
-	Hold    float64    `json:"hold"`
-	Last    string     `json:"last"`
-	Mean    string     `json:"mean"`
-	Gross   string     `json:"gross"`
-	Net     string     `json:"net"`
-	Profit  string     `json:"profit"`
-	Fills   []cb.Fill  `json:"fills,omitempty"`
-	Orders  []cb.Order `json:"orders,omitempty"`
-}
 
-type Posture struct {
+	// ID is effectively the Product ID
+	ID string `json:"id"`
+
+	// Balance is the quantity of the product owned.
+	Balance float64 `json:"balance"`
+
+	// Hold is the quantity of owned products with limit orders placed.
+	Hold float64 `json:"hold"`
+
+	// Value is the dollar change amount of the position at the most recent market price.
+	Value float64 `json:"value"`
+
+	// Sum is the amount spent on the position == (fill.size * fill.price) + fill.fee
+	Sum float64 `json:"sum"`
+
+	// Place is the percent change result to quantify position result.
+	Place float64 `json:"place"`
+
+	// Fills are all the buy fills for this position.
+	Fills []BuyFill `json:"fills,omitempty"`
+
+	// Orders are the limit entry and limit loss orders placed.
+	Orders []SellOrder `json:"orders,omitempty"`
+
+	// Product is the product this position represents. ↑↓
+	Product Product `json:"product"`
 }
 
 func GetPortfolio(userID uint) (Portfolio, error) {
@@ -41,7 +52,7 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 	var err error
 
 	if accounts, err = u.Client().GetAccounts(); err != nil {
-		log.Err(err).Send()
+		log.Err(err).Stack().Send()
 		return Portfolio{}, err
 	}
 
@@ -68,57 +79,103 @@ func GetPortfolio(userID uint) (Portfolio, error) {
 
 		qty++
 
-		productID := account.Currency + "-USD"
-
-		var fills []cb.Fill
-		if fills, err = GetRemainingBuyFills(userID, productID, balance); err != nil {
-			log.Err(err).Send()
+		var product Product
+		if product, err = FindProductByID(account.Currency + "-USD"); err != nil {
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
-		var orders []cb.Order
-		if orders, err = GetOrders(userID, productID); err != nil {
-			log.Err(err).Send()
+		var fills []BuyFill
+		if fills, err = GetRemainingBuyFills(userID, product.ID, balance); err != nil {
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
-		var ticker cb.Ticker
-		if ticker, err = u.Client().GetTicker(productID); err != nil {
-			log.Err(err).Send()
+		var orders []SellOrder
+		if orders, err = GetOrders(userID, product); err != nil {
+			log.Err(err).Stack().Send()
 			return Portfolio{}, err
 		}
 
 		var sum float64
 		for _, fill := range fills {
-			sum += util.StringToFloat64(fill.Price)
+			sum += (fill.Price * fill.Size) + fill.Fee
 		}
 
-		gross := util.StringToFloat64(ticker.Price) * balance
-		crypto += gross
-		net := gross*u.Taker + gross
-		avg := sum / float64(len(fills))
+		now := balance * product.Posture.Price
+		out := math.Max(sum, now) - math.Min(sum, now)
+		place := out / sum * 100
+		if sum > now && place > 0 {
+			place *= -1
+		}
+
+		crypto += product.Posture.Price * balance
 
 		positions = append(positions, Position{
-			productID,
-			balance,
-			hold,
-			util.StringToUsd(ticker.Price),
-			util.FloatToUsd(avg),
-			util.FloatToUsd(gross),
-			util.FloatToUsd(net),
-			util.FloatToUsd(net - (avg * balance)),
-			fills,
-			orders,
+			ID:      product.ID,
+			Balance: balance,
+			Hold:    hold,
+			Value:   now,
+			Sum:     sum,
+			Place:   place,
+			Fills:   fills,
+			Orders:  orders,
+			Product: product,
 		})
 	}
 
 	return Portfolio{
-		time.Now(),
 		positions,
 		util.FloatToUsd(cash),
 		util.FloatToUsd(crypto),
 		util.FloatToUsd(cash + crypto),
-		totalHold,
-		qty,
 	}, nil
+}
+
+func LiquidatePosition(userID uint, productID string) error {
+
+	portfolio, err := GetPortfolio(userID)
+	if err != nil {
+		log.Err(err).Stack().Send()
+		return err
+	}
+
+	for _, position := range portfolio.Positions {
+		if position.ID != productID {
+			continue
+		}
+		if err = liquidatePosition(userID, position); err != nil {
+			log.Err(err).Stack().Send()
+			return err
+		}
+	}
+
+	return nil
+}
+
+func LiquidatePortfolio(userID uint) error {
+
+	portfolio, err := GetPortfolio(userID)
+	if err != nil {
+		log.Err(err).Stack().Send()
+		return err
+	}
+
+	for _, position := range portfolio.Positions {
+		if err = liquidatePosition(userID, position); err != nil {
+			log.Err(err).Stack().Send()
+			return err
+		}
+	}
+
+	return nil
+}
+
+func liquidatePosition(userID uint, position Position) (err error) {
+	size := util.FloatToDecimal(position.Balance)
+	order := position.Product.NewMarketExitOrder(size)
+	if err = PostOrder(userID, order); err != nil {
+		log.Err(err).Stack().Send()
+	}
+	return
 }

@@ -4,257 +4,355 @@ import (
 	"fmt"
 
 	"nuchal-api/util"
-	"strconv"
 	"time"
 )
 
-type sideType int
-
-const (
-	left sideType = iota
-	right
-)
-
-type tradeType int
-
-const (
-	sell tradeType = iota
-	buy
-)
-
-type DataType string
-
-const (
-	trade    DataType = "Trades"
-	candle            = "Candles"
-	splitter          = "Splitters"
-)
+type Sim struct {
+	Chart    `json:"chart"`
+	Analysis `json:"analysis"`
+	Pattern  `json:"pattern"`
+}
 
 type Analysis struct {
 	Investment string    `json:"investment"`
+	Fees       string    `json:"fees"`
 	Return     string    `json:"return"`
 	Percent    string    `json:"percent"`
 	Summaries  []Summary `json:"summaries"`
 }
 
 type Summary struct {
-	TradeNumber              int    `json:"trade_number"`
-	BuyPrice                 string `json:"buy_price"`
-	BuyTime                  string `json:"buy_time"`
-	SellPrice                string `json:"sell_price"`
-	SellTime                 string `json:"sell_time"`
-	Net                      string `json:"net"`
-	Percent                  string `json:"percent"`
-	Gross                    string `json:"gross"`
-	Profit                   string `json:"profit"`
-	investment, roi, percent float64
+	TradeNumber int64  `json:"trade_number"`
+	BuyPrice    string `json:"buy_price"`
+	BuyTime     string `json:"buy_time"`
+	SellPrice   string `json:"sell_price"`
+	SellTime    string `json:"sell_time"`
+	Net         string `json:"net"`
+	Gross       string `json:"gross"`
+	Profit      string `json:"profit"`
+	Percent     string `json:"percent"`
+	Color       string `json:"color"`
+	Emoji       string `json:"emoji"`
 }
 
-type Response struct {
-	Chart    Result   `json:"chart"`
-	OnChart  []Result `json:"onchart"`
-	Analysis Analysis `json:"analysis"`
+type TradeType string
+
+const (
+
+	// lossType when the trade reaches a stop loss limit defined by the pattern
+	lossType TradeType = "loss"
+
+	// evenType when the trade reaches a break even limit defined by nuchal
+	evenType = "even"
+
+	// goalType when the sellOrder  meets or exceeds the goal price
+	goalType = "goal"
+
+	// humpType when the trade exceeds the price thanks to nuchal climb algo
+	humpType = "hump"
+
+	// downType when the trade doesn't finish and ends down
+	downType = "down"
+
+	// upType when the trade doesn't finish and ends down
+	upType = "up"
+)
+
+type MockTrade struct {
+	Index   int64     `json:"index"`
+	Buy     Rate      `json:"buyOrder"`
+	Sell    Rate      `json:"sellOrder"`
+	Type    TradeType `json:"trade_type"`
+	Pattern Pattern   `json:"-"`
+	Maker   float64   `json:"maker"`
+	Taker   float64   `json:"taker"`
 }
 
-type Result struct {
-	DataType `json:"type"`
-	Settings `json:"settings"`
-	Name     string          `json:"name"`
-	Data     [][]interface{} `json:"data"`
+func newTrade(index int64, pattern Pattern) *MockTrade {
+	trade := new(MockTrade)
+	trade.Index = index
+	trade.Pattern = pattern
+	trade.Maker = pattern.User.Maker
+	trade.Taker = pattern.User.Taker
+	return trade
 }
 
-type Settings struct {
-	ZIndex int `json:"z-index"`
+func (t *MockTrade) in() float64 {
+	return t.Buy.Open
 }
 
-type action struct {
-	tradeType
-	time.Time
-	price float64
+func (t *MockTrade) entry() float64 {
+	return t.in() + (t.in() * t.Pattern.User.Maker)
 }
 
-func (a action) toData() []interface{} {
-	return []interface{}{a.UnixMilli(), a.tradeType, a.price}
+func (t *MockTrade) exit() float64 {
+	return t.out() + (t.out() * t.Pattern.User.Taker)
 }
 
-type split struct {
-	sideType
-	time.Time
-	place       float64
-	text, color string
-}
-
-func (s split) toData() []interface{} {
-	return []interface{}{s.UnixMilli(), s.text, s.sideType, s.color, s.place}
-}
-
-func NewProductSim(userID uint, productID uint, alpha, omega int64) Response {
-	return newSwim(GetPattern(userID, productID), alpha, omega)
-}
-
-func NewPatternSim(patternID uint, alpha, omega int64) Response {
-	return newSwim(FindPatternByID(patternID), alpha, omega)
-}
-
-func newSwim(pattern Pattern, alpha, omega int64) Response {
-
-	splits := Result{splitter, Settings{10}, "Splits", nil}
-	trades := Result{trade, Settings{5}, "Trades", nil}
-	chart := Result{candle, Settings{}, pattern.Currency(), nil}
-
-	rates := GetAllRatesBetween(pattern.UserID, pattern.Currency(), alpha, omega)
-	for _, rate := range rates {
-		chart.Data = append(chart.Data, rate.OHLCV())
+func (t *MockTrade) out() float64 {
+	if t.Type == lossType {
+		return t.loss()
+	} else if t.Type == evenType {
+		return t.even()
+	} else if t.Type == goalType {
+		return t.goal()
+	} else if t.Type == humpType {
+		return t.Sell.Open
+	} else if t.Type == downType || t.Type == upType {
+		return t.Sell.Close
+	} else {
+		return 0.0
 	}
-	user := FindUserByID(pattern.UserID)
+}
+
+func (t *MockTrade) color() string {
+	if t.Type == lossType {
+		return "#FF5722"
+	} else if t.Type == evenType {
+		return "#795548"
+	} else if t.Type == goalType {
+		return "#8BC34A"
+	} else if t.Type == humpType {
+		return "#4CAF50"
+	} else if t.Type == downType {
+		return "#FF9800"
+	} else if t.Type == upType {
+		return "#CDDC39"
+	} else {
+		return "#757575"
+	}
+}
+
+func (t *MockTrade) text() string {
+	if t.Type == lossType {
+		return fmt.Sprintf("%d - %s", t.Index, `💩`)
+	} else if t.Type == evenType {
+		return fmt.Sprintf("%d - %s", t.Index, `👍🏻`)
+	} else if t.Type == goalType {
+		return fmt.Sprintf("%d - %s", t.Index, `🎯`)
+	} else if t.Type == humpType {
+		return fmt.Sprintf("%d - %s", t.Index, `🔥`)
+	} else if t.Type == downType {
+		return fmt.Sprintf("%d - %s", t.Index, `📉`)
+	} else if t.Type == upType {
+		return fmt.Sprintf("%d - %s", t.Index, `📈`)
+	} else {
+		return fmt.Sprintf("%d", t.Index)
+	}
+}
+
+func (t *MockTrade) emoji() string {
+	if t.Type == lossType {
+		return `💩`
+	} else if t.Type == evenType {
+		return `👍🏻`
+	} else if t.Type == goalType {
+		return `🎯`
+	} else if t.Type == humpType {
+		return `🔥`
+	} else if t.Type == downType {
+		return `📉`
+	} else if t.Type == upType {
+		return `📈`
+	} else {
+		return ``
+	}
+}
+
+func (t *MockTrade) goal() float64 {
+	return t.Pattern.GoalPrice(t.in())
+}
+
+func (t *MockTrade) loss() float64 {
+	return t.Pattern.LossPrice(t.in())
+}
+
+func (t *MockTrade) even() float64 {
+	entry := t.in() + (t.in() * t.Pattern.User.Maker)
+	exit := entry + (entry * t.Pattern.User.Taker)
+	return entry + exit
+}
+
+func (t *MockTrade) investment() float64 {
+	return t.entry() * t.Pattern.Size
+}
+
+func (t *MockTrade) fees() float64 {
+	return (t.in() * t.Pattern.User.Maker) + (t.out() * t.Pattern.User.Taker)
+}
+
+func (t *MockTrade) net() float64 {
+	return t.out() - t.in()
+}
+
+func (t *MockTrade) gross() float64 {
+	return t.exit() - t.entry()
+}
+
+func (t *MockTrade) profit() float64 {
+	return (t.exit() - t.entry()) * t.Pattern.Size
+}
+
+func (t *MockTrade) percent() float64 {
+	return t.profit() / t.investment() * 100
+}
+
+func (t *MockTrade) orderData() [][]interface{} {
+	return [][]interface{}{
+		{t.Buy.Time().UnixMilli(), 1, t.Pattern.Product.precise(t.in())},
+		{t.Sell.Time().UnixMilli(), 0, t.Pattern.Product.precise(t.out())},
+	}
+}
+
+func (t *MockTrade) splitData() [][]interface{} {
+	i := float64(t.Index%38) * 25.0 / 1000
+	return [][]interface{}{
+		{t.Buy.Time().UnixMilli(), fmt.Sprintf("%d", t.Index), 0, "#757575", i},
+		{t.Sell.Time().UnixMilli(), t.text(), 1, t.color(), i},
+	}
+}
+
+func (t *MockTrade) summary() Summary {
+	return Summary{
+		TradeNumber: t.Index,
+		BuyTime:     t.Buy.Time().UTC().Format(time.Stamp),
+		SellTime:    t.Sell.Time().UTC().Format(time.Stamp),
+		BuyPrice:    t.Pattern.Product.precise(t.in()),
+		SellPrice:   t.Pattern.Product.precise(t.out()),
+		Net:         t.Pattern.Product.precise(t.net()),
+		Gross:       t.Pattern.Product.precise(t.gross()),
+		Profit:      t.Pattern.Product.precise(t.profit()),
+		Percent:     fmt.Sprintf("%.2f", t.percent()) + "%",
+		Color:       t.color(),
+		Emoji:       t.emoji(),
+	}
+}
+
+func NewSim(patternID uint, alpha, omega int64) (sim Sim, err error) {
+
+	pattern := FindPatternByID(patternID)
+
+	var rates []Rate
+	if rates, err = GetRates(pattern.UserID, pattern.ProductID, alpha, omega); err != nil {
+		return
+	}
+
+	var candles, orders, splits [][]interface{}
+	for _, rate := range rates {
+		candles = append(candles, rate.data())
+	}
 
 	var summaries []Summary
+	var inv, roi, fee float64
 	var then, that Rate
+
 	for i, this := range rates {
 
-		trx := len(summaries) + 1
-
-		if pattern.MatchesTweezerBottomPattern(then, that, this) {
-			summary := Summary{
-				TradeNumber: trx,
-			}
-			handleOpportunity(&summary, &trades, &splits, user, pattern, rates[i+1:])
-			summaries = append(summaries, summary)
+		index := int64(len(summaries))
+		if pattern.Bound == buyBound && index == pattern.Bind {
+			break
 		}
 
-		if pattern.Bound == "Buys" && trx == pattern.Break {
-			break
+		if pattern.MatchesTweezerBottomPattern(then, that, this) {
+			index++
+			trade := newTrade(index, pattern)
+			trade.em(rates[i+1:])
+			fee += trade.fees()
+			roi += trade.profit()
+			inv += trade.investment()
+			orders = append(orders, trade.orderData()...)
+			splits = append(splits, trade.splitData()...)
+			summaries = append(summaries, trade.summary())
 		}
 
 		then = that
 		that = this
 	}
 
-	var invest, roi float64
-	for _, summary := range summaries {
-		invest += summary.investment
-		roi += summary.roi
-	}
-
-	return Response{
-		chart,
-		[]Result{trades, splits},
-		Analysis{
-			util.FloatToUsd(invest),
-			util.FloatToUsd(roi),
-			util.FloatToDecimal(roi / invest * 100),
-			summaries,
+	sim.Pattern = pattern
+	sim.Chart = Chart{
+		Layer{candleLayer, "", candles, Settings{}},
+		[]Layer{
+			{orderLayer, "Trades", orders, Settings{Legend: false, ZIndex: 5}},
+			{splitterLayer, "Splits", splits, Settings{Legend: false, ZIndex: 10, LineWidth: 10}},
 		},
 	}
+	sim.Analysis = Analysis{
+		util.FloatToUsd(inv),
+		util.FloatToUsd(fee),
+		util.FloatToUsd(roi),
+		util.FloatToDecimal(roi / inv * 100),
+		summaries,
+	}
+	return
 }
 
-func handleOpportunity(summary *Summary, trades, splits *Result, user User, pattern Pattern, rates []Rate) {
-
-	var on, off split
-	var in, out action
-
-	var goal, loss, even float64
-
-	trx := strconv.Itoa(summary.TradeNumber)
+func (t *MockTrade) em(rates []Rate) {
 
 	for i, rate := range rates {
 
 		if i == 0 {
-			act(&in, rate.Time(), rate.Open, buy)
-			spl(&on, rate.Time(), trx, "#777", 0.75, left)
-
-			goal = pattern.GoalPrice(in.price)
-			loss = pattern.LossPrice(in.price)
-			even = (in.price * user.Taker) + (in.price * user.Maker) + in.price
+			t.Buy = rate
 		}
 
 		// if the low meets or exceeds our loss limit ...
-		if rate.Low <= loss || rate.Low < out.price {
+		if rate.Low <= t.loss() || rate.Low < t.out() {
 
 			// ok, not the worst thing in the world, maybe a loss order already sold this for us
-			if out.price == 0.0 {
+			if t.out() == 0.0 {
 				// nope, we never established a loss order for this chart, we took a bath
-				act(&out, rate.Time(), loss, sell)
-				spl(&off, rate.Time(), trx, "#f4c20d", 0.75, right)
+				t.Type = lossType
+				t.Sell = rate
 			}
 			break
 		}
 
 		// else if the high meets or exceeds our gain limit ...
-		if rate.High >= goal {
+		if rate.High >= t.goal() {
 
 			// is this the first time this has happened?
-			if out.price == 0.0 {
-				// yes, so now we have a loss (limit) buy order placed, continue on.
-				act(&out, rate.Time(), goal, sell)
-				spl(&off, rate.Time(), trx, "#f4c20d", 0.75, right)
+			if t.out() == 0.0 {
+				// yes, so now we have a loss (limit) buyOrder order placed, continue on.
+				t.Type = goalType
+				t.Sell = rate
 			}
 
-			// if we're here, a sell limit has been set,
+			// if we're here, a sellOrder limit has been set,
 			// since we only set orders at the open
 			// check if we placed a new order
-			if out.price < rate.Open {
-				act(&out, rate.Time(), rate.Open, sell)
-				spl(&off, rate.Time(), trx, "#f4c20d", 0.75, right)
+			if t.out() < rate.Open {
+				t.Type = humpType
+				t.Sell = rate
 			}
 			continue
 		}
 
 		// the open of this rate is lower than our limit order
-		if out.price > 0.0 && out.price > rate.Open {
+		if t.out() > 0.0 && t.out() > rate.Open {
+			t.Sell = rate
 			break
 		}
 
-		// if this is the first rate, give nuchal time tradeType
+		// if this is the first rate, give nuchal time orderType
 		if i == 0 {
 			continue
 		}
 
-		// if we have yet to goal this product through a limit order and we can break even, goal it
-		if i > 60*12 && rate.High >= even {
-			act(&out, rate.Time(), even, sell)
-			spl(&off, rate.Time(), trx, "#f4c20d", 0.75, right)
+		// if trading after 12 hours, try to break even
+		if i > 60*12 && rate.High >= t.even() {
+			t.Type = evenType
+			t.Sell = rate
 			break
 		}
 
-		// we're holding the tradeType
+		// we're holding the orderType
 		if i == len(rates)-1 {
-			act(&out, rate.Time(), rate.Close, sell)
-			spl(&off, rate.Time(), trx, "#f4c20d", 0.75, right)
+			t.Sell = rate
+			if rate.Close >= t.even() {
+				t.Type = upType
+			} else {
+				t.Type = downType
+			}
 		}
 	}
-
-	trades.Data = append(trades.Data, in.toData(), out.toData())
-	splits.Data = append(splits.Data, on.toData(), off.toData())
-
-	summary.investment = in.price * pattern.Size
-	summary.BuyPrice = fmt.Sprintf("$%f", in.price)
-	summary.BuyTime = time.Unix(in.Unix(), 0).UTC().Format(time.Stamp)
-	summary.SellPrice = fmt.Sprintf("$%f", out.price)
-	summary.SellTime = time.Unix(out.Unix(), 0).UTC().Format(time.Stamp)
-	summary.Percent = fmt.Sprintf("%.2f", ((out.price/in.price)-1)*100) + "%"
-
-	net := out.price - in.price
-	gross := net * pattern.Size
-	profit := gross - (gross * (user.Maker + user.Taker))
-
-	summary.roi = profit
-	summary.percent = profit / summary.investment * 100
-	summary.Net = fmt.Sprintf("$%.2f", net)
-	summary.Gross = fmt.Sprintf("$%.2f", gross)
-	summary.Profit = fmt.Sprintf("$%.2f", profit)
-}
-
-func act(a *action, ts time.Time, price float64, tt tradeType) {
-	a.Time = ts
-	a.price = price
-	a.tradeType = tt
-}
-
-func spl(s *split, ts time.Time, text, color string, place float64, st sideType) {
-	s.Time = ts
-	s.text = text
-	s.color = color
-	s.place = place
-	s.sideType = st
 }

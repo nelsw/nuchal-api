@@ -38,3 +38,12 @@ func FirstIntOrZero(arr []int) int {
 	}
 	return 0
 }
+
+func StringToUint(s string) uint {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		log.Err(err).Stack().Send()
+		return 0
+	}
+	return uint(i)
+}

@@ -1,59 +1,47 @@
 package model
 
 import (
-	"fmt"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"os"
-	"strings"
+	"nuchal-api/util"
 	"testing"
 	"time"
 )
 
-func init() {
-
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	zerolog.SetGlobalLevel(zerolog.TraceLevel)
-
-	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
-
-	output.FormatLevel = func(i interface{}) string {
-		return strings.ToUpper(fmt.Sprintf("| %-6s|", i))
-	}
-	output.FormatMessage = func(i interface{}) string {
-		return fmt.Sprintf("***%s****", i)
-	}
-	output.FormatFieldName = func(i interface{}) string {
-		return fmt.Sprintf("%s:", i)
-	}
-	output.FormatFieldValue = func(i interface{}) string {
-		return strings.ToUpper(fmt.Sprintf("%s", i))
-	}
-}
-
 var (
 	userID    = uint(1)
-	productID = "ALGO-USD"
-	omega     = time.Now().Unix()
-	alpha     = time.Now().Add(time.Hour * 24 * 7 * -1).Unix()
+	productID = "1INCH-USD"
+	omega     = time.Now().UTC().Unix()
+	alpha     = time.Now().UTC().Add(time.Hour * 24 * 7 * -1).Unix()
 )
 
-func TestFindRatesBetween(t *testing.T) {
-	rates := FindRatesBetween(productID, alpha, omega)
-	fmt.Println(len(rates))
-}
+func TestGetRates(t *testing.T) {
 
-//func TestInitRate(t *testing.T) {
-//	if err := InitRate(userID, "ALGO-USD"); err != nil {
-//		fmt.Println(err)
-//		t.Fail()
-//	}
-//}
-//
-func TestInitRates(t *testing.T) {
-	if err := InitRates(userID); err != nil {
-		fmt.Println(err)
+	rates, err := GetRates(userID, productID, alpha, omega)
+	if err != nil {
 		t.Fail()
 	}
+	r := rates[len(rates)-1]
+	util.PrettyPrint(r.Time())
+}
+
+func TestGetLastRate(t *testing.T) {
+	var todayRate Rate
+
+	FindFirstRateByProductIDInTimeDescOrder(productID, &todayRate)
+	util.PrettyPrint(todayRate)
+
+	before := time.Unix(todayRate.UnixSecond, 0).Add(time.Hour * -24).UTC().Unix()
+
+	var yesterdayRate Rate
+	FindFirstRateByProductIDAndLessThanTimeInTimeDescOrder(productID, before, &yesterdayRate)
+	util.PrettyPrint(yesterdayRate)
+}
+
+func TestFindRates(t *testing.T) {
+
+	//fmt.Println(alpha)
+	//fmt.Println(omega)
+	//
+	//rates := FindRates(productID, alpha, omega)
+	//
+	//util.PrettyPrint(rates)
 }

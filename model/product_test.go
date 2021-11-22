@@ -1,25 +1,36 @@
 package model
 
 import (
-	"fmt"
 	"nuchal-api/util"
 	"testing"
 )
 
-func TestInitProducts(t *testing.T) {
+func TestFindAllProducts(t *testing.T) {
 
-	userID := 1
-	err := InitProducts(uint(userID))
+	products, err := FindAllProducts()
 	if err != nil {
 		t.Fail()
 	}
+	util.PrettyPrint(&products)
 
-	fmt.Println(util.Pretty(ProductArr))
 }
 
-func TestFindProductByProductID(t *testing.T) {
+func TestFindAllProductsByQuote(t *testing.T) {
 
-	product := FindProductByProductID("ALGO-USD")
-	util.PrettyPrint(product)
+	products, err := FindAllProductsByQuote("USD")
+	if err != nil {
+		t.Fail()
+	}
+	util.PrettyPrint(products)
+
+}
+
+func TestFindProductByID(t *testing.T) {
+
+	p, err := FindProductByID("ALGO-USD")
+	if err != nil {
+		t.Fail()
+	}
+	util.PrettyPrint(p)
 
 }
